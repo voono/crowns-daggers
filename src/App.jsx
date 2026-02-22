@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Swords, Shield, Handshake, Tent, Crown, ChevronRight, AlertCircle, Castle, Sparkles, Users } from 'lucide-react';
+import { Swords, Shield, Handshake, Tent, Crown, ChevronRight, AlertCircle, Castle, Sparkles, Users, ZoomIn, ZoomOut, Maximize } from 'lucide-react';
 
 // --- GAME CONFIGURATION & CONSTANTS ---
 const PLAYERS = {
@@ -37,14 +37,14 @@ const MAP_CONFIGS = {
       t8: { id: 't8', name: 'Storm\'s End', x: 50, y: 80, connections: ['t5', 't6', 't7'], isCastle: true },
     },
     initial: {
-      t1: { ownerId: 'p2', units: 4 }, // Wolf Starts North
+      t1: { ownerId: 'p2', units: 4 }, 
       t2: { ownerId: null, units: 1 },
       t3: { ownerId: null, units: 1 },
       t4: { ownerId: null, units: 1 },
-      t5: { ownerId: null, units: 3 }, // Throne Guarded
+      t5: { ownerId: null, units: 3 }, 
       t6: { ownerId: null, units: 1 },
       t7: { ownerId: null, units: 1 },
-      t8: { ownerId: 'p1', units: 4 }, // Stag Starts South
+      t8: { ownerId: 'p1', units: 4 }, 
     }
   },
   3: {
@@ -64,13 +64,13 @@ const MAP_CONFIGS = {
       t12: { id: 't12', name: 'The Crownlands', x: 50, y: 25, connections: ['t1', 't2', 't3', 't5', 't4'] },
     },
     initial: {
-      t1: { ownerId: 'p2', units: 3 }, // Wolf North West
+      t1: { ownerId: 'p2', units: 3 }, 
       t2: { ownerId: null, units: 1 }, 
       t3: { ownerId: null, units: 1 },
-      t4: { ownerId: null, units: 3 }, // Throne
+      t4: { ownerId: null, units: 3 }, 
       t5: { ownerId: null, units: 1 }, 
-      t6: { ownerId: 'p3', units: 3 }, // Dragon South West
-      t7: { ownerId: 'p1', units: 3 }, // Stag South East
+      t6: { ownerId: 'p3', units: 3 }, 
+      t7: { ownerId: 'p1', units: 3 }, 
       t8: { ownerId: null, units: 1 },
       t9: { ownerId: null, units: 1 },
       t10: { ownerId: null, units: 1 },
@@ -99,20 +99,20 @@ const MAP_CONFIGS = {
       t16: { id: 't16', name: 'Narrow Sea', x: 95, y: 65, connections: ['t9', 't7'] },
     },
     initial: {
-      t1: { ownerId: 'p2', units: 3 }, // Wolf NW
-      t2: { ownerId: 'p3', units: 3 }, // Dragon NE
+      t1: { ownerId: 'p2', units: 3 }, 
+      t2: { ownerId: 'p3', units: 3 }, 
       t3: { ownerId: null, units: 1 },
-      t4: { ownerId: null, units: 3 }, // Throne
+      t4: { ownerId: null, units: 3 }, 
       t5: { ownerId: null, units: 1 }, 
-      t6: { ownerId: 'p4', units: 3 }, // Kraken SW
-      t7: { ownerId: 'p1', units: 3 }, // Stag SE
+      t6: { ownerId: 'p4', units: 3 }, 
+      t7: { ownerId: 'p1', units: 3 }, 
       t8: { ownerId: null, units: 1 },
       t9: { ownerId: null, units: 1 },
       t10: { ownerId: null, units: 1 },
       t11: { ownerId: null, units: 1 },
       t12: { ownerId: null, units: 2 },
       t13: { ownerId: null, units: 1 },
-      t14: { ownerId: null, units: 2 }, // Dorne
+      t14: { ownerId: null, units: 2 }, 
       t15: { ownerId: null, units: 1 },
       t16: { ownerId: null, units: 1 },
     }
@@ -142,6 +142,19 @@ const MapBoard = ({
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [scrollStart, setScrollStart] = useState({ x: 0, y: 0 });
+  
+  // Calculate a perfect fit for the initial viewport
+  const getInitialScale = () => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth < 768 ? 0.35 : 0.75; // More zoomed out on mobile
+    }
+    return 0.75;
+  };
+  const [scale, setScale] = useState(getInitialScale()); // Zoom scale
+
+  // Native map dimensions before scaling
+  const BASE_WIDTH = 1000;
+  const BASE_HEIGHT = 800;
 
   const canMuster = currentEvent.id !== 'HARSH_WINTER';
   const canSupport = currentEvent.id !== 'FOG_OF_WAR';
@@ -152,8 +165,8 @@ const MapBoard = ({
     const centerMap = () => {
       if (mapRef.current) {
         const { scrollWidth, clientWidth, scrollHeight, clientHeight } = mapRef.current;
-        mapRef.current.scrollLeft = (scrollWidth - clientWidth) / 2;
-        mapRef.current.scrollTop = (scrollHeight - clientHeight) / 2;
+        if (scrollWidth > clientWidth) mapRef.current.scrollLeft = (scrollWidth - clientWidth) / 2;
+        if (scrollHeight > clientHeight) mapRef.current.scrollTop = (scrollHeight - clientHeight) / 2;
       }
     };
 
@@ -167,7 +180,33 @@ const MapBoard = ({
     };
   }, []);
 
-  const handleMouseDown = (e) => {
+  // --- Zoom Controls ---
+  const handleZoomIn = (e) => {
+    e.stopPropagation();
+    setScale(s => Math.min(2.0, s + 0.15));
+  };
+
+  const handleZoomOut = (e) => {
+    e.stopPropagation();
+    setScale(s => Math.max(0.25, s - 0.15));
+  };
+
+  const handleResetZoom = (e) => {
+    e.stopPropagation();
+    setScale(getInitialScale());
+    // Recentering after reset
+    setTimeout(() => {
+      if (mapRef.current) {
+        const { scrollWidth, clientWidth, scrollHeight, clientHeight } = mapRef.current;
+        if (scrollWidth > clientWidth) mapRef.current.scrollLeft = (scrollWidth - clientWidth) / 2;
+        if (scrollHeight > clientHeight) mapRef.current.scrollTop = (scrollHeight - clientHeight) / 2;
+      }
+    }, 50);
+  };
+
+  // --- Mouse & Touch Dragging (Panning) ---
+  const handlePointerDown = (e) => {
+    if (e.pointerType === 'touch' && !e.isPrimary) return; // Basic multi-touch ignoring for pan
     setIsDragging(true);
     dragDistance.current = 0;
     setDragStart({ x: e.pageX, y: e.pageY });
@@ -177,9 +216,9 @@ const MapBoard = ({
     });
   };
 
-  const handleMouseMove = (e) => {
+  const handlePointerMove = (e) => {
     if (!isDragging) return;
-    e.preventDefault();
+    e.preventDefault(); // Prevent native pull-to-refresh on mobile
     const dx = e.pageX - dragStart.x;
     const dy = e.pageY - dragStart.y;
     dragDistance.current += Math.abs(dx) + Math.abs(dy);
@@ -187,7 +226,7 @@ const MapBoard = ({
     mapRef.current.scrollTop = scrollStart.y - dy;
   };
 
-  const handleMouseUpOrLeave = () => {
+  const handlePointerUpOrLeave = () => {
     setIsDragging(false);
   };
 
@@ -219,156 +258,187 @@ const MapBoard = ({
   };
 
   return (
-    <div 
-      ref={mapRef}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUpOrLeave}
-      onMouseLeave={handleMouseUpOrLeave}
-      className={`w-full h-[60vh] md:h-auto md:aspect-video bg-stone-900 rounded-xl border border-stone-700 overflow-auto shadow-2xl hide-scroll ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
-      style={{ msOverflowStyle: 'none', scrollbarWidth: 'none' }}
-    >
-      {/* Generous padding wrapper to create empty safe-zones for panning */}
-      <div className="p-24 md:p-40 w-full h-full min-w-[1000px] min-h-[800px] box-border">
-        <div className="relative w-full h-full">
-          {/* SVG Connections Layer */}
-          <svg className="absolute inset-0 w-full h-full pointer-events-none">
-            {Object.values(mapData).map(node => (
-              node.connections.map(targetId => {
-                const target = mapData[targetId];
-                // Only draw line once (if id < targetId) to prevent double drawing
-                if (node.id < targetId) {
-                  return (
-                    <line
-                      key={`${node.id}-${targetId}`}
-                      x1={`${node.x}%`} y1={`${node.y}%`}
-                      x2={`${target.x}%`} y2={`${target.y}%`}
-                      stroke="#444" strokeWidth="3" strokeDasharray="6 4"
-                      className="opacity-50"
-                    />
-                  );
-                }
-                return null;
-              })
-            ))}
-          
-          {/* Draw Order Action Lines (Arrows) */}
-          {Object.entries(orders).map(([sourceId, order]) => {
-            // Only show lines if revealing, or if it's the current player's secret turn
-            if (!showAllOrders && (!currentPlayerId || territories[sourceId].ownerId !== currentPlayerId)) return null;
+    <div className="relative w-full h-[60vh] md:h-[65vh] bg-stone-900 rounded-xl border border-stone-700 shadow-2xl overflow-hidden group">
+      
+      {/* Zoom Controls Overlay */}
+      <div className="absolute top-4 right-4 z-50 flex flex-col gap-2 opacity-80 hover:opacity-100 transition-opacity">
+        <button onClick={handleZoomIn} className="w-10 h-10 bg-stone-800 text-stone-200 rounded-full flex items-center justify-center shadow-lg border border-stone-600 hover:bg-stone-700 active:scale-95 transition-transform" title="Zoom In">
+          <ZoomIn size={20} />
+        </button>
+        <button onClick={handleResetZoom} className="w-10 h-10 bg-stone-800 text-stone-200 rounded-full flex items-center justify-center shadow-lg border border-stone-600 hover:bg-stone-700 active:scale-95 transition-transform" title="Reset Zoom">
+          <Maximize size={18} />
+        </button>
+        <button onClick={handleZoomOut} className="w-10 h-10 bg-stone-800 text-stone-200 rounded-full flex items-center justify-center shadow-lg border border-stone-600 hover:bg-stone-700 active:scale-95 transition-transform" title="Zoom Out">
+          <ZoomOut size={20} />
+        </button>
+      </div>
 
-            if (order.type === 'MARCH' || order.type === 'SUPPORT') {
-              const source = mapData[sourceId];
-              const target = mapData[order.targetId];
-              const isSupport = order.type === 'SUPPORT';
-              const isFriendly = order.type === 'MARCH' && territories[order.targetId].ownerId === territories[sourceId].ownerId;
-              
-              let strokeColor = "#ef4444"; // default red for attack
-              if (isSupport) strokeColor = "#3b82f6"; // blue for support
-              else if (isFriendly) strokeColor = "#d6d3d1"; // light stone/gray for transfer
+      {/* Scrollable Map Container */}
+      <div 
+        ref={mapRef}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUpOrLeave}
+        onPointerLeave={handlePointerUpOrLeave}
+        className={`w-full h-full overflow-auto hide-scroll flex ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+        style={{ msOverflowStyle: 'none', scrollbarWidth: 'none', touchAction: 'none' }}
+      >
+        {/* Dynamic Canvas Sizer - expands scrollable area based on scale */}
+        <div 
+          className="relative transition-all duration-200 ease-out m-auto shrink-0"
+          style={{ 
+            width: `${BASE_WIDTH * scale}px`, 
+            height: `${BASE_HEIGHT * scale}px`,
+          }}
+        >
+          {/* Scaled Map Content - pinned to top left of the sizer, scaled cleanly */}
+          <div 
+            className="absolute top-0 left-0 origin-top-left transition-transform duration-200 ease-out"
+            style={{ 
+              width: `${BASE_WIDTH}px`, 
+              height: `${BASE_HEIGHT}px`,
+              transform: `scale(${scale})`
+            }}
+          >
+            {/* SVG Connections Layer */}
+            <svg className="absolute inset-0 w-full h-full pointer-events-none">
+              {Object.values(mapData).map(node => (
+                node.connections.map(targetId => {
+                  const target = mapData[targetId];
+                  // Only draw line once (if id < targetId) to prevent double drawing
+                  if (node.id < targetId) {
+                    return (
+                      <line
+                        key={`${node.id}-${targetId}`}
+                        x1={`${node.x}%`} y1={`${node.y}%`}
+                        x2={`${target.x}%`} y2={`${target.y}%`}
+                        stroke="#444" strokeWidth="3" strokeDasharray="6 4"
+                        className="opacity-50"
+                      />
+                    );
+                  }
+                  return null;
+                })
+              ))}
+            
+            {/* Draw Order Action Lines (Arrows) */}
+            {Object.entries(orders).map(([sourceId, order]) => {
+              // Only show lines if revealing, or if it's the current player's secret turn
+              if (!showAllOrders && (!currentPlayerId || territories[sourceId].ownerId !== currentPlayerId)) return null;
 
-              return (
-                <line
-                  key={`order-${sourceId}`}
-                  x1={`${source.x}%`} y1={`${source.y}%`}
-                  x2={`${target.x}%`} y2={`${target.y}%`}
-                  stroke={strokeColor} 
-                  strokeWidth="4"
-                  markerEnd="url(#arrowhead)"
-                  className="animate-pulse"
-                />
-              );
-            }
-            return null;
-          })}
-          
-          {/* SVG Definitions for Arrows */}
-          <defs>
-            <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-              <polygon points="0 0, 10 3.5, 0 7" fill="#fff" opacity="0.5"/>
-            </marker>
-          </defs>
-        </svg>
-
-        {/* Node Layer */}
-        {Object.values(mapData).map(node => {
-          const tState = territories[node.id];
-          const owner = tState.ownerId ? PLAYERS[tState.ownerId] : null;
-          const isSelected = selectedNode === node.id;
-          const isTargetable = pendingAction && selectedNode && getNeighbors(selectedNode).includes(node.id);
-          const isCastle = node.isCastle;
-          
-          // Determine if we should show an order token here
-          const nodeOrder = orders[node.id];
-          const showOrder = Boolean(nodeOrder && (showAllOrders || (currentPlayerId && tState.ownerId === currentPlayerId)));
-
-          return (
-            <div
-              key={node.id}
-              className={`absolute transform -translate-x-1/2 -translate-y-1/2 transition-all duration-200
-                ${isTargetable ? 'scale-110 z-20 cursor-crosshair' : ''}
-                ${isSelected ? 'scale-125 z-30' : 'z-10 hover:scale-110'}
-                ${interactive && tState.ownerId === currentPlayerId ? 'cursor-pointer' : ''}
-              `}
-              style={{ left: `${node.x}%`, top: `${node.y}%` }}
-              onClick={() => handleNodeClick(node.id)}
-            >
-              {/* Territory Name Label */}
-              <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 whitespace-nowrap text-xs font-bold text-stone-400 bg-stone-900/80 px-2 py-1 rounded">
-                {node.name}
-              </div>
-
-              {/* Castle Indicator */}
-              {isCastle && (
-                 <div className="absolute -top-2 -left-2 bg-stone-800 rounded-full p-1 border border-stone-500 shadow-md z-20" title="Castle: +1 Defense">
-                    <Castle size={14} className="text-stone-300" />
-                 </div>
-              )}
-
-              {/* The Node Circle */}
-              <div className={`w-14 h-14 md:w-16 md:h-16 rounded-full border-4 flex items-center justify-center relative shadow-lg
-                ${owner ? owner.color : NEUTRAL_COLOR}
-                ${owner ? owner.border : NEUTRAL_BORDER}
-                ${isTargetable ? 'ring-4 ring-white animate-pulse' : ''}
-                ${isSelected ? 'ring-4 ring-yellow-400' : ''}
-              `}>
-                <span className="text-xl font-black text-white drop-shadow-md">{tState.units}</span>
+              if (order.type === 'MARCH' || order.type === 'SUPPORT') {
+                const source = mapData[sourceId];
+                const target = mapData[order.targetId];
+                const isSupport = order.type === 'SUPPORT';
+                const isFriendly = order.type === 'MARCH' && territories[order.targetId].ownerId === territories[sourceId].ownerId;
                 
-                {/* Visual Order Token Indicator */}
-                {showOrder && (
-                  <div className="absolute -bottom-3 -right-3 w-8 h-8 bg-stone-800 rounded-full border-2 border-stone-400 flex items-center justify-center shadow-md text-white">
-                    {nodeOrder.type === 'MARCH' && <Swords size={16} className="text-red-400"/>}
-                    {nodeOrder.type === 'DEFEND' && <Shield size={16} className="text-green-400"/>}
-                    {nodeOrder.type === 'SUPPORT' && <Handshake size={16} className="text-blue-400"/>}
-                    {nodeOrder.type === 'MUSTER' && <Tent size={16} className="text-yellow-400"/>}
+                let strokeColor = "#ef4444"; // default red for attack
+                if (isSupport) strokeColor = "#3b82f6"; // blue for support
+                else if (isFriendly) strokeColor = "#d6d3d1"; // light stone/gray for transfer
+
+                return (
+                  <line
+                    key={`order-${sourceId}`}
+                    x1={`${source.x}%`} y1={`${source.y}%`}
+                    x2={`${target.x}%`} y2={`${target.y}%`}
+                    stroke={strokeColor} 
+                    strokeWidth="4"
+                    markerEnd="url(#arrowhead)"
+                    className="animate-pulse"
+                  />
+                );
+              }
+              return null;
+            })}
+            
+            {/* SVG Definitions for Arrows */}
+            <defs>
+              <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" fill="#fff" opacity="0.5"/>
+              </marker>
+            </defs>
+          </svg>
+
+          {/* Node Layer */}
+          {Object.values(mapData).map(node => {
+            const tState = territories[node.id];
+            const owner = tState.ownerId ? PLAYERS[tState.ownerId] : null;
+            const isSelected = selectedNode === node.id;
+            const isTargetable = pendingAction && selectedNode && getNeighbors(selectedNode).includes(node.id);
+            const isCastle = node.isCastle;
+            
+            // Determine if we should show an order token here
+            const nodeOrder = orders[node.id];
+            const showOrder = Boolean(nodeOrder && (showAllOrders || (currentPlayerId && tState.ownerId === currentPlayerId)));
+
+            return (
+              <div
+                key={node.id}
+                className={`absolute transform -translate-x-1/2 -translate-y-1/2 transition-all duration-200
+                  ${isTargetable ? 'scale-110 z-20 cursor-crosshair' : ''}
+                  ${isSelected ? 'scale-125 z-30' : 'z-10 hover:scale-110'}
+                  ${interactive && tState.ownerId === currentPlayerId ? 'cursor-pointer' : ''}
+                `}
+                style={{ left: `${node.x}%`, top: `${node.y}%` }}
+                onClick={() => handleNodeClick(node.id)}
+              >
+                {/* Territory Name Label */}
+                <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 whitespace-nowrap text-xs font-bold text-stone-400 bg-stone-900/80 px-2 py-1 rounded">
+                  {node.name}
+                </div>
+
+                {/* Castle Indicator */}
+                {isCastle && (
+                   <div className="absolute -top-2 -left-2 bg-stone-800 rounded-full p-1 border border-stone-500 shadow-md z-20" title="Castle: +1 Defense">
+                      <Castle size={14} className="text-stone-300" />
+                   </div>
+                )}
+
+                {/* The Node Circle */}
+                <div className={`w-14 h-14 md:w-16 md:h-16 rounded-full border-4 flex items-center justify-center relative shadow-lg
+                  ${owner ? owner.color : NEUTRAL_COLOR}
+                  ${owner ? owner.border : NEUTRAL_BORDER}
+                  ${isTargetable ? 'ring-4 ring-white animate-pulse' : ''}
+                  ${isSelected ? 'ring-4 ring-yellow-400' : ''}
+                `}>
+                  <span className="text-xl font-black text-white drop-shadow-md">{tState.units}</span>
+                  
+                  {/* Visual Order Token Indicator */}
+                  {showOrder && (
+                    <div className="absolute -bottom-3 -right-3 w-8 h-8 bg-stone-800 rounded-full border-2 border-stone-400 flex items-center justify-center shadow-md text-white">
+                      {nodeOrder.type === 'MARCH' && <Swords size={16} className="text-red-400"/>}
+                      {nodeOrder.type === 'DEFEND' && <Shield size={16} className="text-green-400"/>}
+                      {nodeOrder.type === 'SUPPORT' && <Handshake size={16} className="text-blue-400"/>}
+                      {nodeOrder.type === 'MUSTER' && <Tent size={16} className="text-yellow-400"/>}
+                    </div>
+                  )}
+                </div>
+
+                {/* Radial Action Menu (Only shows when selected) */}
+                {isSelected && interactive && !pendingAction && (
+                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-48 h-48 md:w-40 md:h-40 pointer-events-none z-50">
+                    <button onClick={(e) => { e.stopPropagation(); setPendingAction('MARCH'); }} className="pointer-events-auto absolute -top-4 left-1/2 transform -translate-x-1/2 w-12 h-12 md:w-10 md:h-10 bg-red-600 rounded-full flex items-center justify-center hover:bg-red-500 border-2 border-stone-900 shadow-xl transition-transform hover:scale-110" title="March / Attack">
+                      <Swords size={20} className="text-white"/>
+                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); setOrders(prev => ({...prev, [node.id]: { type: 'DEFEND' }})); setSelectedNode(null); }} className="pointer-events-auto absolute bottom-0 left-1/2 transform -translate-x-1/2 w-12 h-12 md:w-10 md:h-10 bg-green-600 rounded-full flex items-center justify-center hover:bg-green-500 border-2 border-stone-900 shadow-xl transition-transform hover:scale-110" title="Defend">
+                      <Shield size={20} className="text-white"/>
+                    </button>
+                    {canSupport && (
+                      <button onClick={(e) => { e.stopPropagation(); setPendingAction('SUPPORT'); }} className="pointer-events-auto absolute top-1/2 -right-4 transform -translate-y-1/2 w-12 h-12 md:w-10 md:h-10 bg-blue-600 rounded-full flex items-center justify-center hover:bg-blue-500 border-2 border-stone-900 shadow-xl transition-transform hover:scale-110" title="Support">
+                        <Handshake size={20} className="text-white"/>
+                      </button>
+                    )}
+                    {canMuster && (
+                      <button onClick={(e) => { e.stopPropagation(); setOrders(prev => ({...prev, [node.id]: { type: 'MUSTER' }})); setSelectedNode(null); }} className="pointer-events-auto absolute top-1/2 -left-4 transform -translate-y-1/2 w-12 h-12 md:w-10 md:h-10 bg-yellow-600 rounded-full flex items-center justify-center hover:bg-yellow-500 border-2 border-stone-900 shadow-xl transition-transform hover:scale-110" title="Muster">
+                        <Tent size={20} className="text-white"/>
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
-
-              {/* Radial Action Menu (Only shows when selected) */}
-              {isSelected && interactive && !pendingAction && (
-                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-40 h-40 pointer-events-none">
-                  <button onClick={(e) => { e.stopPropagation(); setPendingAction('MARCH'); }} className="pointer-events-auto absolute -top-4 left-1/2 transform -translate-x-1/2 w-10 h-10 bg-red-600 rounded-full flex items-center justify-center hover:bg-red-500 border-2 border-stone-900 shadow-xl transition-transform hover:scale-110" title="March / Attack">
-                    <Swords size={18} className="text-white"/>
-                  </button>
-                  <button onClick={(e) => { e.stopPropagation(); setOrders(prev => ({...prev, [node.id]: { type: 'DEFEND' }})); setSelectedNode(null); }} className="pointer-events-auto absolute bottom-0 left-1/2 transform -translate-x-1/2 w-10 h-10 bg-green-600 rounded-full flex items-center justify-center hover:bg-green-500 border-2 border-stone-900 shadow-xl transition-transform hover:scale-110" title="Defend">
-                    <Shield size={18} className="text-white"/>
-                  </button>
-                  {canSupport && (
-                    <button onClick={(e) => { e.stopPropagation(); setPendingAction('SUPPORT'); }} className="pointer-events-auto absolute top-1/2 -right-4 transform -translate-y-1/2 w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center hover:bg-blue-500 border-2 border-stone-900 shadow-xl transition-transform hover:scale-110" title="Support">
-                      <Handshake size={18} className="text-white"/>
-                    </button>
-                  )}
-                  {canMuster && (
-                    <button onClick={(e) => { e.stopPropagation(); setOrders(prev => ({...prev, [node.id]: { type: 'MUSTER' }})); setSelectedNode(null); }} className="pointer-events-auto absolute top-1/2 -left-4 transform -translate-y-1/2 w-10 h-10 bg-yellow-600 rounded-full flex items-center justify-center hover:bg-yellow-500 border-2 border-stone-900 shadow-xl transition-transform hover:scale-110" title="Muster">
-                      <Tent size={18} className="text-white"/>
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
+            );
+          })}
+          </div>
         </div>
       </div>
     </div>
@@ -635,46 +705,48 @@ export default function App() {
 
   // --- MAIN RENDER ---
   return (
-    <div className="min-h-screen bg-stone-950 text-stone-200 font-sans selection:bg-red-900 overflow-x-hidden">
+    <div className="min-h-screen bg-stone-950 text-stone-200 font-sans selection:bg-red-900 pb-24 md:pb-8">
       
       {/* HEADER */}
-      <header className="bg-stone-900 border-b border-stone-800 p-4 shadow-md flex justify-between items-center z-50 relative">
+      <header className="bg-stone-900 border-b border-stone-800 p-3 md:p-4 shadow-md flex justify-between items-center z-40 relative sticky top-0">
         <div className="flex items-center gap-2">
-          <Crown className="text-yellow-500" size={28} />
-          <h1 className="text-2xl font-black tracking-widest uppercase text-white">Crowns <span className="text-red-600">&</span> Daggers</h1>
+          <Crown className="text-yellow-500" size={24} />
+          <h1 className="text-xl md:text-2xl font-black tracking-widest uppercase text-white">Crowns <span className="text-red-600">&</span> Daggers</h1>
         </div>
         {phase !== 'TITLE' && phase !== 'GAME_OVER' && (
-          <div className="text-sm font-bold text-stone-400 bg-stone-800 px-4 py-1 rounded-full border border-stone-700">
+          <div className="text-xs md:text-sm font-bold text-stone-400 bg-stone-800 px-3 py-1 rounded-full border border-stone-700">
             Turn {turn}
           </div>
         )}
       </header>
 
-      <main className="max-w-6xl mx-auto p-4 md:p-8 flex flex-col gap-6">
+      <main className="max-w-6xl mx-auto p-2 md:p-8 flex flex-col gap-6">
 
         {/* --- TITLE SCREEN --- */}
         {phase === 'TITLE' && (
-          <div className="flex flex-col items-center justify-center mt-20 text-center animate-fade-in">
+          <div className="flex flex-col items-center justify-center mt-10 md:mt-20 text-center animate-fade-in px-4">
             <Crown size={80} className="text-yellow-500 mb-6" />
-            <h2 className="text-5xl md:text-7xl font-black mb-4 uppercase tracking-tighter">Betray Your <br/><span className="text-red-600">Friends</span></h2>
-            <p className="text-xl text-stone-400 max-w-xl mb-12">A game of hidden orders, ruthless diplomacy, and inevitable backstabbing.</p>
+            <h2 className="text-4xl md:text-7xl font-black mb-4 uppercase tracking-tighter leading-tight">Betray Your <br className="hidden md:block"/><span className="text-red-600">Friends</span></h2>
+            <p className="text-lg md:text-xl text-stone-400 max-w-xl mb-12">A game of hidden orders, ruthless diplomacy, and inevitable backstabbing.</p>
             
-            <div className="flex items-center justify-center gap-4 mb-8 bg-stone-900 p-4 rounded-2xl border border-stone-800">
+            <div className="flex flex-col md:flex-row items-center justify-center gap-4 mb-8 bg-stone-900 p-4 rounded-2xl border border-stone-800 w-full max-w-md">
                <span className="text-stone-400 font-bold uppercase tracking-wider text-sm flex items-center gap-2"><Users size={18}/> Players:</span>
-               {[2, 3, 4].map(num => (
-                 <button 
-                   key={num} 
-                   onClick={() => setPlayerCount(num)}
-                   className={`w-12 h-12 rounded-full font-black text-xl flex items-center justify-center transition-all ${playerCount === num ? 'bg-yellow-500 text-stone-900 shadow-[0_0_15px_rgba(234,179,8,0.5)] scale-110' : 'bg-stone-800 text-stone-500 hover:bg-stone-700'}`}
-                 >
-                   {num}
-                 </button>
-               ))}
+               <div className="flex gap-4">
+                 {[2, 3, 4].map(num => (
+                   <button 
+                     key={num} 
+                     onClick={() => setPlayerCount(num)}
+                     className={`w-12 h-12 rounded-full font-black text-xl flex items-center justify-center transition-all ${playerCount === num ? 'bg-yellow-500 text-stone-900 shadow-[0_0_15px_rgba(234,179,8,0.5)] scale-110' : 'bg-stone-800 text-stone-500 hover:bg-stone-700'}`}
+                   >
+                     {num}
+                   </button>
+                 ))}
+               </div>
             </div>
 
             <button 
               onClick={startGame}
-              className="bg-red-700 hover:bg-red-600 text-white font-bold text-2xl py-4 px-12 rounded-lg shadow-[0_0_20px_rgba(220,38,38,0.5)] transition-all transform hover:scale-105"
+              className="bg-red-700 hover:bg-red-600 text-white font-bold text-xl md:text-2xl py-4 px-12 rounded-lg shadow-[0_0_20px_rgba(220,38,38,0.5)] transition-all transform hover:scale-105 w-full md:w-auto"
             >
               Start Game
             </button>
@@ -687,31 +759,36 @@ export default function App() {
             <div className="lg:col-span-2 flex flex-col gap-4">
               
               {/* Event Banner */}
-              <div className="bg-stone-800 p-4 rounded-xl border border-blue-900/50 shadow-lg flex gap-4 items-center">
-                <div className="text-4xl drop-shadow-md">{currentEvent.icon}</div>
+              <div className="bg-stone-800 p-3 md:p-4 rounded-xl border border-blue-900/50 shadow-lg flex gap-4 items-center">
+                <div className="text-3xl md:text-4xl drop-shadow-md">{currentEvent.icon}</div>
                 <div>
-                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                    <Sparkles size={16} className="text-blue-400" /> Event: {currentEvent.name}
+                  <h3 className="text-base md:text-lg font-bold text-white flex items-center gap-2">
+                    <Sparkles size={16} className="text-blue-400 shrink-0" /> {currentEvent.name}
                   </h3>
-                  <p className="text-stone-300 text-sm">{currentEvent.desc}</p>
+                  <p className="text-stone-300 text-xs md:text-sm">{currentEvent.desc}</p>
                 </div>
               </div>
 
-              <div className="bg-stone-800 p-4 rounded-xl border border-stone-700 flex justify-between items-center shadow-lg">
+              <div className="bg-stone-800 p-3 md:p-4 rounded-xl border border-stone-700 flex flex-col md:flex-row justify-between items-start md:items-center shadow-lg gap-4">
                 <div>
-                  <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-                  <AlertCircle className="text-blue-400" />
+                  <h2 className="text-xl md:text-2xl font-bold text-white flex items-center gap-2">
+                  <AlertCircle className="text-blue-400 shrink-0" />
                   Public Diplomacy Phase
                 </h2>
-                <p className="text-stone-400 text-sm mt-1">Discuss, form alliances, and lie. When ready, input orders secretly.</p>
+                <p className="text-stone-400 text-xs md:text-sm mt-1">Discuss, form alliances, and lie. Input orders secretly when ready.</p>
               </div>
-              <button 
-                onClick={startOrdersPhase}
-                className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-6 rounded-lg shadow-lg flex items-center gap-2 transition-transform hover:scale-105"
-              >
-                Begin Secret Orders <ChevronRight size={20}/>
-              </button>
+              
+              {/* Desktop Button */}
+              <div className="hidden md:block">
+                <button 
+                  onClick={startOrdersPhase}
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-6 rounded-lg shadow-lg flex items-center gap-2 transition-transform hover:scale-105 whitespace-nowrap"
+                >
+                  Begin Secret Orders <ChevronRight size={20}/>
+                </button>
+              </div>
             </div>
+            
             <MapBoard 
               showAllOrders={false} 
               territories={territories}
@@ -728,22 +805,22 @@ export default function App() {
 
           <div className="flex flex-col gap-4">
               {/* Leaderboard */}
-              <div className="bg-stone-900 border border-stone-700 rounded-xl p-4 shadow-lg">
-                <h3 className="text-xl font-bold text-white border-b border-stone-800 pb-2 mb-4">The Houses</h3>
-                <div className="flex flex-col gap-3">
+              <div className="bg-stone-900 border border-stone-700 rounded-xl p-3 md:p-4 shadow-lg">
+                <h3 className="text-lg md:text-xl font-bold text-white border-b border-stone-800 pb-2 mb-3 md:mb-4">The Houses</h3>
+                <div className="flex flex-col gap-2 md:gap-3">
                   {Object.values(PLAYERS).slice(0, playerCount).map(p => {
                     const owned = Object.values(territories).filter(t => t.ownerId === p.id).length;
                     return (
-                      <div key={p.id} className="flex flex-col bg-stone-800 p-3 rounded-lg">
+                      <div key={p.id} className="flex flex-col bg-stone-800 p-2 md:p-3 rounded-lg">
                         <div className="flex justify-between items-center">
-                          <span className={`font-bold ${p.text}`}>{p.name}</span>
+                          <span className={`font-bold text-sm md:text-base ${p.text}`}>{p.name}</span>
                           <div className="flex gap-1">
                             {[...Array(mapConfig.winCondition)].map((_, i) => (
-                              <div key={i} className={`w-3 h-3 md:w-4 md:h-4 rounded-sm ${i < owned ? p.color : 'bg-stone-700'}`}></div>
+                              <div key={i} className={`w-2 h-2 md:w-3 md:h-3 rounded-sm ${i < owned ? p.color : 'bg-stone-700'}`}></div>
                             ))}
                           </div>
                         </div>
-                        <div className="text-xs text-stone-400 mt-1">
+                        <div className="text-[10px] md:text-xs text-stone-400 mt-1">
                           <span className="font-bold text-stone-300">{p.powerName}:</span> {p.powerDesc}
                         </div>
                       </div>
@@ -753,9 +830,9 @@ export default function App() {
               </div>
 
               {/* Action Log */}
-              <div className="bg-stone-900 border border-stone-700 rounded-xl p-4 shadow-lg flex-1 overflow-hidden flex flex-col">
-                <h3 className="text-xl font-bold text-white border-b border-stone-800 pb-2 mb-4">Ravens (Logs)</h3>
-                <div className="overflow-y-auto flex-1 flex flex-col gap-2 text-sm pr-2 scrollbar-thin scrollbar-thumb-stone-700">
+              <div className="bg-stone-900 border border-stone-700 rounded-xl p-3 md:p-4 shadow-lg flex-1 overflow-hidden flex flex-col min-h-[250px]">
+                <h3 className="text-lg md:text-xl font-bold text-white border-b border-stone-800 pb-2 mb-3 md:mb-4">Ravens (Logs)</h3>
+                <div className="overflow-y-auto flex-1 flex flex-col gap-2 text-xs md:text-sm pr-2 scrollbar-thin scrollbar-thumb-stone-700">
                   {logs.map((log, i) => (
                     <div key={i} className={`p-2 rounded ${log.includes('---') ? 'bg-stone-800 text-stone-300 font-bold text-center my-2' : 'bg-stone-800/50 text-stone-400 border-l-2 border-stone-600'}`}>
                       {log}
@@ -764,18 +841,28 @@ export default function App() {
                 </div>
               </div>
             </div>
+            
+            {/* Mobile Sticky Action Bar */}
+            <div className="md:hidden fixed bottom-0 left-0 w-full p-4 bg-stone-900 border-t border-stone-700 z-50 shadow-[0_-5px_15px_rgba(0,0,0,0.5)]">
+              <button 
+                onClick={startOrdersPhase}
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-6 rounded-lg shadow-lg flex items-center justify-center gap-2"
+              >
+                Begin Secret Orders <ChevronRight size={20}/>
+              </button>
+            </div>
           </div>
         )}
 
         {/* --- PASS DEVICE SCREEN --- */}
         {phase === 'PASS' && (
-          <div className="flex flex-col items-center justify-center min-h-[60vh] text-center animate-fade-in">
+          <div className="flex flex-col items-center justify-center min-h-[50vh] text-center animate-fade-in px-4">
             <Shield size={64} className={PLAYERS[playerOrder[currentPlayerIdx]].text} />
-            <h2 className="text-4xl font-black mt-6 mb-2">Pass Device to <br/><span className={PLAYERS[playerOrder[currentPlayerIdx]].text}>{PLAYERS[playerOrder[currentPlayerIdx]].name}</span></h2>
-            <p className="text-stone-400 mb-12 text-lg">Ensure no one else is looking.</p>
+            <h2 className="text-3xl md:text-4xl font-black mt-6 mb-2">Pass Device to <br/><span className={PLAYERS[playerOrder[currentPlayerIdx]].text}>{PLAYERS[playerOrder[currentPlayerIdx]].name}</span></h2>
+            <p className="text-stone-400 mb-12 text-base md:text-lg">Ensure no one else is looking.</p>
             <button 
               onClick={() => setPhase('SECRET')}
-              className={`font-bold text-2xl py-4 px-12 rounded-lg shadow-lg text-stone-900 transition-transform hover:scale-105 ${PLAYERS[playerOrder[currentPlayerIdx]].color}`}
+              className={`font-bold text-xl md:text-2xl py-4 px-8 md:px-12 rounded-lg shadow-lg text-stone-900 transition-transform hover:scale-105 w-full md:w-auto ${PLAYERS[playerOrder[currentPlayerIdx]].color}`}
             >
               I am {PLAYERS[playerOrder[currentPlayerIdx]].name}
             </button>
@@ -784,31 +871,34 @@ export default function App() {
 
         {/* --- SECRET ORDERS SCREEN --- */}
         {phase === 'SECRET' && (
-          <div className="flex flex-col gap-4 animate-fade-in relative">
-            <div className={`p-4 rounded-xl flex justify-between items-center shadow-lg border-2 ${PLAYERS[playerOrder[currentPlayerIdx]].border} bg-stone-900`}>
+          <div className="flex flex-col gap-4 animate-fade-in relative pb-16 md:pb-0">
+            <div className={`p-3 md:p-4 rounded-xl flex flex-col md:flex-row justify-between items-start md:items-center shadow-lg border-2 gap-4 ${PLAYERS[playerOrder[currentPlayerIdx]].border} bg-stone-900`}>
               <div>
-                <h2 className={`text-xl font-bold ${PLAYERS[playerOrder[currentPlayerIdx]].text}`}>Secret Orders: {PLAYERS[playerOrder[currentPlayerIdx]].name}</h2>
-                <p className="text-stone-400 text-sm mb-2">Click your territories to issue commands.</p>
-                <div className="inline-flex items-center gap-1 bg-stone-950 px-2 py-1 rounded border border-stone-700 text-xs">
-                  <Sparkles size={12} className={PLAYERS[playerOrder[currentPlayerIdx]].text} />
-                  <span className={`font-bold ${PLAYERS[playerOrder[currentPlayerIdx]].text}`}>{PLAYERS[playerOrder[currentPlayerIdx]].powerName}:</span>
-                  <span className="text-stone-300">{PLAYERS[playerOrder[currentPlayerIdx]].powerDesc}</span>
+                <h2 className={`text-lg md:text-xl font-bold ${PLAYERS[playerOrder[currentPlayerIdx]].text}`}>Secret Orders: {PLAYERS[playerOrder[currentPlayerIdx]].name}</h2>
+                <p className="text-stone-400 text-xs md:text-sm mb-2">Click your territories to issue commands.</p>
+                <div className="inline-flex items-center gap-1 bg-stone-950 px-2 py-1 rounded border border-stone-700 text-[10px] md:text-xs max-w-full overflow-hidden">
+                  <Sparkles size={12} className={`shrink-0 ${PLAYERS[playerOrder[currentPlayerIdx]].text}`} />
+                  <span className={`font-bold shrink-0 ${PLAYERS[playerOrder[currentPlayerIdx]].text}`}>{PLAYERS[playerOrder[currentPlayerIdx]].powerName}:</span>
+                  <span className="text-stone-300 truncate">{PLAYERS[playerOrder[currentPlayerIdx]].powerDesc}</span>
                 </div>
               </div>
-              <button 
-                onClick={nextPlayerOrder}
-                className="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-6 rounded-lg shadow-lg flex items-center gap-2"
-              >
-                Lock Orders & Finish
-              </button>
+              
+              <div className="hidden md:block">
+                <button 
+                  onClick={nextPlayerOrder}
+                  className="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-6 rounded-lg shadow-lg flex items-center gap-2 whitespace-nowrap"
+                >
+                  Lock Orders & Finish
+                </button>
+              </div>
             </div>
             
             {/* Context Help Bar */}
           <div className="h-8 flex justify-center">
             {pendingAction && (
-              <div className="bg-stone-800 px-4 py-1 rounded-full border border-stone-600 text-sm font-bold animate-pulse text-yellow-400">
-                Select an adjacent territory to {pendingAction}...
-                <button onClick={() => setPendingAction(null)} className="ml-4 text-stone-400 hover:text-white underline">Cancel</button>
+              <div className="bg-stone-800 px-4 py-1 rounded-full border border-stone-600 text-xs md:text-sm font-bold animate-pulse text-yellow-400 flex items-center gap-2">
+                <span>Target an adjacent territory...</span>
+                <button onClick={() => setPendingAction(null)} className="text-stone-400 hover:text-white underline">Cancel</button>
               </div>
             )}
           </div>
@@ -829,30 +919,43 @@ export default function App() {
           />
           
           {/* Legend */}
-            <div className="flex justify-center gap-6 text-sm text-stone-400 mt-2 bg-stone-900 p-3 rounded-lg border border-stone-800 max-w-2xl mx-auto flex-wrap">
-              <span className="flex items-center gap-2"><Swords size={16} className="text-red-400"/> March / Attack</span>
-              <span className="flex items-center gap-2"><Shield size={16} className="text-green-400"/> Defend (x2)</span>
-              <span className={`flex items-center gap-2 ${currentEvent.id === 'FOG_OF_WAR' ? 'opacity-30 line-through' : ''}`}><Handshake size={16} className="text-blue-400"/> Support</span>
-              <span className={`flex items-center gap-2 ${currentEvent.id === 'HARSH_WINTER' ? 'opacity-30 line-through' : ''}`}><Tent size={16} className="text-yellow-400"/> Muster</span>
-              <span className="flex items-center gap-2"><Castle size={16} className="text-stone-300"/> Castle (+1 Def)</span>
+            <div className="flex justify-center gap-3 md:gap-6 text-[10px] md:text-sm text-stone-400 mt-2 bg-stone-900 p-2 md:p-3 rounded-lg border border-stone-800 max-w-2xl mx-auto flex-wrap">
+              <span className="flex items-center gap-1"><Swords size={14} className="text-red-400"/> March/Attack</span>
+              <span className="flex items-center gap-1"><Shield size={14} className="text-green-400"/> Defend</span>
+              <span className={`flex items-center gap-1 ${currentEvent.id === 'FOG_OF_WAR' ? 'opacity-30 line-through' : ''}`}><Handshake size={14} className="text-blue-400"/> Support</span>
+              <span className={`flex items-center gap-1 ${currentEvent.id === 'HARSH_WINTER' ? 'opacity-30 line-through' : ''}`}><Tent size={14} className="text-yellow-400"/> Muster</span>
+              <span className="flex items-center gap-1"><Castle size={14} className="text-stone-300"/> Castle (+1 Def)</span>
+            </div>
+
+            {/* Mobile Sticky Action Bar for Secrets */}
+            <div className="md:hidden fixed bottom-0 left-0 w-full p-4 bg-stone-900 border-t border-stone-700 z-50 shadow-[0_-5px_15px_rgba(0,0,0,0.5)]">
+              <button 
+                onClick={nextPlayerOrder}
+                className="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 px-6 rounded-lg shadow-lg flex items-center justify-center gap-2"
+              >
+                Lock Orders & Finish
+              </button>
             </div>
           </div>
         )}
 
         {/* --- REVEAL SCREEN --- */}
         {phase === 'REVEAL' && (
-          <div className="flex flex-col gap-6 animate-fade-in">
-             <div className="bg-red-900/30 p-4 rounded-xl border border-red-800 flex justify-between items-center shadow-lg text-center mx-auto w-full max-w-3xl">
+          <div className="flex flex-col gap-6 animate-fade-in pb-16 md:pb-0">
+             <div className="bg-red-900/30 p-3 md:p-4 rounded-xl border border-red-800 flex flex-col md:flex-row justify-between items-center shadow-lg text-center mx-auto w-full max-w-3xl gap-4">
                 <div>
-                  <h2 className="text-3xl font-black text-red-500 uppercase tracking-widest">Orders Revealed!</h2>
-                  <p className="text-stone-300 text-sm mt-1">Behold the betrayals.</p>
+                  <h2 className="text-2xl md:text-3xl font-black text-red-500 uppercase tracking-widest">Orders Revealed!</h2>
+                  <p className="text-stone-300 text-xs md:text-sm mt-1">Behold the betrayals.</p>
                 </div>
-                <button 
-                onClick={resolveTurn}
-                className="bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-8 rounded-lg shadow-[0_0_15px_rgba(220,38,38,0.6)] flex items-center gap-2 text-xl transition-transform hover:scale-105"
-              >
-                Resolve Bloodshed
-              </button>
+                
+                <div className="hidden md:block">
+                  <button 
+                  onClick={resolveTurn}
+                  className="bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-8 rounded-lg shadow-[0_0_15px_rgba(220,38,38,0.6)] flex items-center gap-2 text-lg md:text-xl transition-transform hover:scale-105"
+                >
+                  Resolve Bloodshed
+                </button>
+              </div>
             </div>
             <MapBoard 
               showAllOrders={true} 
@@ -866,32 +969,44 @@ export default function App() {
               mapData={mapConfig.nodes}
               currentEvent={currentEvent}
             />
+
+            {/* Mobile Sticky Action Bar for Resolve */}
+            <div className="md:hidden fixed bottom-0 left-0 w-full p-4 bg-stone-900 border-t border-red-900 z-50 shadow-[0_-5px_15px_rgba(220,38,38,0.3)]">
+              <button 
+                onClick={resolveTurn}
+                className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-6 rounded-lg shadow-lg flex items-center justify-center gap-2 text-lg uppercase tracking-wider"
+              >
+                Resolve Bloodshed
+              </button>
+            </div>
         </div>
       )}
 
       {/* --- GAME OVER SCREEN --- */}
       {phase === 'GAME_OVER' && winner && (
-        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center animate-fade-in">
-          <Crown size={100} className="text-yellow-500 mb-6 drop-shadow-[0_0_20px_rgba(234,179,8,0.5)]" />
-          <h2 className="text-6xl font-black mb-2 uppercase text-white">The War is Over</h2>
-          <p className={`text-4xl font-bold mb-12 ${winner.text}`}>{winner.name} Claims the Throne!</p>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center animate-fade-in px-4">
+          <Crown size={80} className="text-yellow-500 mb-6 drop-shadow-[0_0_20px_rgba(234,179,8,0.5)] md:w-24 md:h-24" />
+          <h2 className="text-4xl md:text-6xl font-black mb-2 uppercase text-white">The War is Over</h2>
+          <p className={`text-2xl md:text-4xl font-bold mb-12 ${winner.text}`}>{winner.name} Claims the Throne!</p>
           
-          <MapBoard 
-            showAllOrders={false} 
-            territories={territories}
-            orders={orders}
-            setOrders={setOrders}
-            selectedNode={selectedNode}
-            setSelectedNode={setSelectedNode}
-            pendingAction={pendingAction}
-            setPendingAction={setPendingAction}
-            mapData={mapConfig.nodes}
-            currentEvent={currentEvent}
-          />
+          <div className="w-full max-w-4xl">
+            <MapBoard 
+              showAllOrders={false} 
+              territories={territories}
+              orders={orders}
+              setOrders={setOrders}
+              selectedNode={selectedNode}
+              setSelectedNode={setSelectedNode}
+              pendingAction={pendingAction}
+              setPendingAction={setPendingAction}
+              mapData={mapConfig.nodes}
+              currentEvent={currentEvent}
+            />
+          </div>
 
           <button 
             onClick={() => setPhase('TITLE')}
-              className="mt-12 bg-stone-700 hover:bg-stone-600 text-white font-bold text-xl py-3 px-8 rounded-lg transition-transform hover:scale-105"
+              className="mt-8 md:mt-12 bg-stone-700 hover:bg-stone-600 text-white font-bold text-lg md:text-xl py-3 px-8 rounded-lg transition-transform hover:scale-105 w-full md:w-auto"
             >
               Play Again
             </button>
