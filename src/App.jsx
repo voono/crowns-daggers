@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useLayoutEffect } from 'react';
-import { Swords, Shield, Handshake, Tent, Crown, ChevronRight, AlertCircle, Castle, Sparkles, Users, Map as MapIcon, ScrollText, History, X, Check } from 'lucide-react';
+import { Swords, Shield, Handshake, Tent, Crown, ChevronRight, Castle, Sparkles, Users, Map as MapIcon, ScrollText, History, X, Check } from 'lucide-react';
 
 // --- GAME CONFIGURATION & CONSTANTS ---
 const PLAYERS = {
@@ -95,7 +95,16 @@ const MAP_CONFIGS = {
   }
 };
 
-// --- SUB-COMPONENTS ---
+// --- HELPER COMPONENTS ---
+
+// Mini sub-component for cleanly rendering stat breakdown pills in the battle view
+const ModRow = ({ label, val, color = "text-stone-300", bg = "bg-stone-900/60" }) => (
+  <div className={`flex justify-between items-center ${bg} px-2.5 py-1.5 rounded-lg border border-stone-800/50`}>
+      <span className="text-stone-400 font-bold uppercase tracking-wider text-[10px]">{label}</span>
+      <span className={`font-black text-sm ${color}`}>{val}</span>
+  </div>
+);
+
 
 // A hook to handle multi-touch panning and pinch-to-zoom
 const usePanZoom = (containerRef) => {
@@ -105,12 +114,10 @@ const usePanZoom = (containerRef) => {
   const pinchStartDist = useRef(null);
   const pinchStartScale = useRef(null);
 
-  // Center map initially based on screen size using useLayoutEffect to prevent visual jump
   useLayoutEffect(() => {
     if (!containerRef.current) return;
     const { clientWidth, clientHeight } = containerRef.current;
     
-    // Fallback in case the container hasn't sized yet
     const w = clientWidth || window.innerWidth;
     const h = clientHeight || window.innerHeight;
     
@@ -121,14 +128,14 @@ const usePanZoom = (containerRef) => {
       scale: Math.max(0.4, initialScale),
       ready: true
     });
-  }, []); // Only run once on mount
+  }, []);
 
   useEffect(() => {
     const element = containerRef.current;
     if (!element) return;
 
     const handleTouchStart = (e) => {
-      e.preventDefault(); // Stop native scrolling
+      e.preventDefault(); 
       if (e.touches.length === 1) {
         isDragging.current = true;
         dragStart.current = {
@@ -170,7 +177,6 @@ const usePanZoom = (containerRef) => {
       pinchStartDist.current = null;
     };
 
-    // Mouse support
     const handleMouseDown = (e) => {
       isDragging.current = true;
       dragStart.current = { x: e.clientX - transform.x, y: e.clientY - transform.y };
@@ -226,11 +232,8 @@ const OrderDrawer = ({
 
   return (
     <div className="absolute bottom-0 left-0 right-0 bg-stone-900 border-t-2 border-stone-700 rounded-t-3xl p-6 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] z-50 animate-slide-up pb-safe">
-      
-      {/* Drawer Handle */}
       <div className="w-12 h-1.5 bg-stone-700 rounded-full mx-auto mb-4" />
 
-      {/* Target Selection Mode */}
       {pendingAction ? (
         <div className="flex flex-col gap-4">
           <div className="flex justify-between items-center">
@@ -247,7 +250,6 @@ const OrderDrawer = ({
           </div>
         </div>
       ) : (
-        /* Action Selection Mode */
         <div className="flex flex-col gap-4">
           <div className="flex justify-between items-center mb-2">
             <div>
@@ -317,9 +319,6 @@ const FullScreenMap = ({
   const handleNodeClick = (nodeId) => {
     if (!interactive) return;
 
-    const nodeState = territories[nodeId];
-    
-    // If waiting to target something for Attack/Support
     if (pendingAction && selectedNode) {
       if (getNeighbors(selectedNode).includes(nodeId)) {
         setOrders(prev => ({ ...prev, [selectedNode]: { type: pendingAction, targetId: nodeId } }));
@@ -329,23 +328,18 @@ const FullScreenMap = ({
       return;
     }
 
-    // Otherwise select the territory (whether we own it or not, to see info)
     setSelectedNode(selectedNode === nodeId ? null : nodeId);
     setPendingAction(null);
   };
 
   return (
     <div className="relative w-full h-full bg-stone-950 overflow-hidden touch-none" ref={containerRef}>
-      
-      {/* Transform Container with opacity fade-in driven by transform.ready */}
       <div 
         className={`absolute top-0 left-0 w-[1000px] h-[1000px] origin-top-left will-change-transform transition-opacity duration-500 ease-in-out ${transform.ready ? 'opacity-100' : 'opacity-0'}`}
         style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }}
       >
-        {/* Background Texture / Grid (Optional visual aid) */}
         <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(#444 2px, transparent 2px)', backgroundSize: '40px 40px' }} />
 
-        {/* SVG Connections Layer */}
         <svg className="absolute inset-0 w-full h-full pointer-events-none">
           {Object.values(mapData).map(node => (
             node.connections.map(targetId => {
@@ -359,7 +353,6 @@ const FullScreenMap = ({
             })
           ))}
           
-          {/* Order Action Lines (Arrows) */}
           {Object.entries(orders).map(([sourceId, order]) => {
             if (!showAllOrders && (!currentPlayerId || territories[sourceId].ownerId !== currentPlayerId)) return null;
             if (order.type === 'MARCH' || order.type === 'SUPPORT') {
@@ -368,17 +361,13 @@ const FullScreenMap = ({
               const isSupport = order.type === 'SUPPORT';
               const isFriendly = order.type === 'MARCH' && territories[order.targetId].ownerId === territories[sourceId].ownerId;
               
-              let strokeColor = "#ef4444"; // red 
-              if (isSupport) strokeColor = "#3b82f6"; // blue
-              else if (isFriendly) strokeColor = "#a8a29e"; // stone
+              let strokeColor = "#ef4444"; 
+              if (isSupport) strokeColor = "#3b82f6"; 
+              else if (isFriendly) strokeColor = "#a8a29e"; 
 
-              // Calculate offset to back off the arrows from the exact centers of the nodes
               const dx = target.x - source.x;
               const dy = target.y - source.y;
               const dist = Math.sqrt(dx * dx + dy * dy);
-              
-              // 1% coordinate distance = 10px on the virtual grid. 
-              // Node radius is ~40px (4%). We add padding for aesthetics and arrowhead length.
               const sourceOffset = 4;
               const targetOffset = 4.0; 
               
@@ -387,7 +376,6 @@ const FullScreenMap = ({
               let endX = target.x;
               let endY = target.y;
 
-              // Only adjust if distance is large enough to prevent math inversion
               if (dist > (sourceOffset + targetOffset)) {
                 startX = source.x + (dx * sourceOffset) / dist;
                 startY = source.y + (dy * sourceOffset) / dist;
@@ -416,7 +404,6 @@ const FullScreenMap = ({
           </defs>
         </svg>
 
-        {/* Node Layer */}
         {Object.values(mapData).map(node => {
           const tState = territories[node.id];
           const owner = tState.ownerId ? PLAYERS[tState.ownerId] : null;
@@ -425,8 +412,6 @@ const FullScreenMap = ({
           const isCastle = node.isCastle;
           const nodeOrder = orders[node.id];
           const showOrder = Boolean(nodeOrder && (showAllOrders || (currentPlayerId && tState.ownerId === currentPlayerId)));
-          
-          // Dim non-targetable nodes during action selection
           const isDimmed = pendingAction && !isTargetable && selectedNode !== node.id;
 
           return (
@@ -440,11 +425,9 @@ const FullScreenMap = ({
               style={{ left: `${node.x}%`, top: `${node.y}%` }}
               onClick={(e) => { e.stopPropagation(); handleNodeClick(node.id); }}
               onTouchEnd={(e) => { 
-                // Prevent map pan from triggering click
                 if (!containerRef.current.isDragging) handleNodeClick(node.id); 
               }}
             >
-              {/* Territory Name Label */}
               <div className="absolute -top-10 left-1/2 transform -translate-x-1/2 whitespace-nowrap text-sm font-black tracking-wide text-stone-300 bg-stone-900/90 px-3 py-1 rounded-md border border-stone-700/50 shadow-md backdrop-blur-sm">
                 {node.name}
               </div>
@@ -455,7 +438,6 @@ const FullScreenMap = ({
                  </div>
               )}
 
-              {/* The Node Circle */}
               <div className={`w-20 h-20 rounded-full border-4 flex items-center justify-center relative shadow-2xl transition-all
                 ${owner ? owner.color : NEUTRAL_COLOR}
                 ${owner ? owner.border : NEUTRAL_BORDER}
@@ -464,7 +446,6 @@ const FullScreenMap = ({
               `}>
                 <span className="text-3xl font-black text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">{tState.units}</span>
                 
-                {/* Visual Order Token Indicator */}
                 {showOrder && (
                   <div className="absolute -bottom-4 -right-4 w-10 h-10 bg-stone-900 rounded-full border-2 border-stone-400 flex items-center justify-center shadow-xl text-white z-30">
                     {nodeOrder.type === 'MARCH' && <Swords size={20} className="text-red-400"/>}
@@ -479,17 +460,11 @@ const FullScreenMap = ({
         })}
       </div>
 
-      {/* Action Drawer Overlay */}
       {interactive && (
         <OrderDrawer 
-          selectedNode={selectedNode}
-          pendingAction={pendingAction}
-          territories={territories}
-          mapNodes={mapData}
-          currentPlayerId={currentPlayerId}
-          currentEvent={currentEvent}
-          onSetPendingAction={setPendingAction}
-          onSetOrder={(type) => setOrders(prev => ({...prev, [selectedNode]: { type }}))}
+          selectedNode={selectedNode} pendingAction={pendingAction} territories={territories}
+          mapNodes={mapData} currentPlayerId={currentPlayerId} currentEvent={currentEvent}
+          onSetPendingAction={setPendingAction} onSetOrder={(type) => setOrders(prev => ({...prev, [selectedNode]: { type }}))}
           onCancel={() => { setPendingAction(null); setSelectedNode(null); }}
         />
       )}
@@ -504,7 +479,7 @@ export default function App() {
   const [mapConfig, setMapConfig] = useState(MAP_CONFIGS[3]);
 
   // Core Game State
-  const [phase, setPhase] = useState('TITLE'); // TITLE, WAR_ROOM, PASS, SECRET, REVEAL, GAME_OVER
+  const [phase, setPhase] = useState('TITLE'); 
   const [territories, setTerritories] = useState(MAP_CONFIGS[3].initial);
   const [turn, setTurn] = useState(1);
   const [logs, setLogs] = useState(["The war for the Throne begins!"]);
@@ -521,9 +496,9 @@ export default function App() {
   const [pendingAction, setPendingAction] = useState(null); 
   
   // Mobile Tab State for War Room
-  const [activeTab, setActiveTab] = useState('map'); // 'map', 'intel', 'logs'
+  const [activeTab, setActiveTab] = useState('map'); 
 
-  // Pre-calculate Battles for the "Reveal" Phase overlay
+  // Pre-calculate Battles for the "Reveal" Phase
   const combatPreviews = useMemo(() => {
     if (phase !== 'REVEAL') return [];
 
@@ -593,7 +568,7 @@ export default function App() {
   }, [phase, orders, territories, currentEvent.id, mapConfig.nodes]);
 
 
-  // --- GAME LOOP LOGIC (Unchanged robust logic) ---
+  // --- GAME LOOP LOGIC ---
 
   const startGame = () => {
     const config = MAP_CONFIGS[playerCount];
@@ -813,7 +788,6 @@ export default function App() {
     const p = PLAYERS[playerOrder[currentPlayerIdx]];
     return (
       <div className="fixed inset-0 bg-stone-950 flex flex-col items-center justify-center p-6 text-center z-50 animate-fade-in overflow-hidden">
-        {/* Decorative background element */}
         <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[150vw] h-[150vw] md:w-[80vw] md:h-[80vw] opacity-10 blur-3xl rounded-full ${p.color}`}></div>
 
         <div className="relative z-10 flex flex-col items-center w-full max-w-md">
@@ -821,13 +795,7 @@ export default function App() {
             <Shield size={80} className={p.text} />
           </div>
           <h2 className="text-3xl md:text-4xl font-black mb-2 text-white uppercase tracking-widest">Pass Device To</h2>
-          <h1 className={`text-5xl md:text-6xl font-black mb-6 ${p.text} drop-shadow-lg`}>{p.name}</h1>
-
-          <div className="bg-stone-900/80 border border-stone-800 rounded-xl p-4 mb-12 w-full backdrop-blur-sm shadow-xl">
-            <p className="text-stone-300 text-lg flex items-center justify-center gap-2">
-              <AlertCircle size={24} className="text-red-500" /> Keep orders secret.
-            </p>
-          </div>
+          <h1 className={`text-5xl md:text-6xl font-black mb-12 ${p.text} drop-shadow-lg`}>{p.name}</h1>
 
           <button 
             onClick={() => setPhase('SECRET')}
@@ -844,7 +812,6 @@ export default function App() {
     const p = PLAYERS[playerOrder[currentPlayerIdx]];
     return (
       <div className="fixed inset-0 bg-stone-950 flex flex-col z-50 animate-fade-in">
-        {/* Minimal Header */}
         <div className="absolute top-0 left-0 right-0 p-4 pt-safe z-40 pointer-events-none flex justify-between items-start">
            <div className="pointer-events-auto bg-stone-900/90 backdrop-blur border-2 rounded-xl p-3 shadow-lg max-w-[60%]" style={{ borderColor: p.color.replace('bg-','') }}>
               <h2 className={`text-lg font-black leading-tight ${p.text}`}>{p.name}</h2>
@@ -859,7 +826,6 @@ export default function App() {
            </button>
         </div>
 
-        {/* Fullscreen Interactive Map */}
         <div className="flex-1 w-full h-full relative">
           <FullScreenMap 
             interactive={true} currentPlayerId={p.id} showAllOrders={false} 
@@ -873,86 +839,147 @@ export default function App() {
     );
   }
 
+  // --- REDESIGNED REVEAL PHASE ---
   if (phase === 'REVEAL') {
     return (
       <div className="fixed inset-0 bg-stone-950 flex flex-col z-50 animate-fade-in">
-        <div className="absolute top-safe left-0 right-0 p-4 z-40 pointer-events-none flex flex-col items-center">
-            <div className="bg-red-950/90 backdrop-blur border-2 border-red-800 rounded-3xl p-5 shadow-2xl text-center pointer-events-auto w-full max-w-md max-h-[85vh] flex flex-col">
-              <h2 className="text-3xl font-black text-white uppercase tracking-widest mb-1 shrink-0">Orders Revealed</h2>
-              
-              <div className="flex-1 overflow-y-auto min-h-0 my-4 pr-1 space-y-4 text-left custom-scrollbar">
-                {combatPreviews.length === 0 ? (
-                  <div className="text-stone-400 text-sm text-center py-6 bg-stone-900/50 rounded-xl border border-stone-800">
-                    No bloodshed this turn.
-                  </div>
-                ) : (
-                  combatPreviews.map(preview => (
-                    <div key={preview.targetId} className="bg-stone-900 border border-stone-700 rounded-2xl p-4 shadow-inner">
-                      <h4 className="font-black text-white mb-3 text-center text-lg drop-shadow-md">{mapConfig.nodes[preview.targetId].name}</h4>
-                      
-                      {/* Defender Stats */}
-                      <div className={`flex justify-between items-stretch mb-2 rounded-xl border-2 overflow-hidden ${preview.defender.ownerId ? PLAYERS[preview.defender.ownerId].border : 'border-stone-700'}`}>
-                        <div className="bg-stone-800/80 p-3 flex-1">
-                          <span className={`font-black flex items-center gap-2 text-base ${preview.defender.ownerId ? PLAYERS[preview.defender.ownerId].text : 'text-stone-400'}`}>
-                            <Shield size={18} className={preview.defender.ownerId ? PLAYERS[preview.defender.ownerId].text : 'text-stone-400'}/>
-                            {preview.defender.ownerId ? PLAYERS[preview.defender.ownerId].name : 'Neutrals'}
-                          </span>
-                          <div className="text-xs text-stone-300 mt-2 space-y-1">
-                            <div className="flex justify-between"><span>Base Units</span><span>{preview.defender.base}</span></div>
-                            {preview.defender.support > 0 && <div className="flex justify-between text-blue-300"><span>Support Received</span><span>+{preview.defender.support}</span></div>}
-                            {preview.defender.isDefending && <div className="flex justify-between text-green-300"><span>Defend Order</span><span>+{preview.defender.base}</span></div>}
-                            {preview.defender.isWolf && <div className="flex justify-between text-stone-200"><span>House Wolf Bonus</span><span>+1</span></div>}
-                            {preview.defender.isCastle && <div className="flex justify-between text-yellow-100"><span>Castle Defense</span><span>+1</span></div>}
-                            {preview.defender.isRebellion && <div className="flex justify-between text-orange-400"><span>Rebellion Bonus</span><span>+1</span></div>}
-                          </div>
-                        </div>
-                        <div className={`flex items-center justify-center px-4 bg-stone-900 font-black text-3xl ${preview.defender.ownerId ? PLAYERS[preview.defender.ownerId].text : 'text-stone-400'}`}>
-                          {preview.defender.power}
-                        </div>
-                      </div>
-
-                      {/* VS Badge */}
-                      <div className="flex justify-center -my-3 relative z-10">
-                        <span className="bg-stone-950 border border-stone-700 text-stone-400 text-xs font-black px-2 py-1 rounded-full uppercase tracking-wider">VS</span>
-                      </div>
-
-                      {/* Attacker Stats */}
-                      {preview.attackers.map(att => (
-                        <div key={att.attackerId} className={`mt-2 flex justify-between items-stretch rounded-xl border-2 overflow-hidden ${PLAYERS[att.attackerId].border}`}>
-                          <div className="bg-stone-800/80 p-3 flex-1">
-                            <span className={`font-black flex items-center gap-2 text-base ${PLAYERS[att.attackerId].text}`}>
-                              <Swords size={18} className={PLAYERS[att.attackerId].text}/>
-                              {PLAYERS[att.attackerId].name}
-                            </span>
-                            <div className="text-xs text-stone-300 mt-2 space-y-1">
-                              <div className="flex justify-between"><span>Marching Units</span><span>{att.base}</span></div>
-                              {att.support > 0 && <div className="flex justify-between text-blue-300"><span>Support Received</span><span>+{att.support}</span></div>}
-                              {att.isDragon && <div className="flex justify-between text-red-400"><span>House Dragon Bonus</span><span>+1</span></div>}
-                            </div>
-                          </div>
-                          <div className={`flex items-center justify-center px-4 bg-stone-900 font-black text-3xl ${PLAYERS[att.attackerId].text}`}>
-                            {att.power}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ))
-                )}
-              </div>
-
-              <button 
-                onClick={resolveTurn}
-                className="w-full bg-red-600 hover:bg-red-500 text-white font-black py-4 rounded-xl shadow-[0_0_20px_rgba(220,38,38,0.5)] flex justify-center items-center gap-2 text-xl active:scale-95 transition-transform shrink-0"
-              >
-                Resolve Bloodshed <Swords size={24}/>
-              </button>
-            </div>
-        </div>
-        <div className="flex-1 w-full h-full relative">
+        {/* Render Map Context Behind Modal */}
+        <div className="absolute inset-0 z-0">
           <FullScreenMap 
             showAllOrders={true} territories={territories} orders={orders} setOrders={setOrders} 
             mapData={mapConfig.nodes} currentEvent={currentEvent}
           />
+        </div>
+
+        {/* Modal Overlay */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center p-4 z-40 pointer-events-none bg-stone-950/70 backdrop-blur-sm">
+            <div className="bg-stone-900/95 border-2 border-stone-700 rounded-[2rem] shadow-2xl pointer-events-auto w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden ring-1 ring-white/10">
+              
+              {/* Header */}
+              <div className="bg-stone-950 p-5 border-b border-stone-800 shrink-0 text-center relative overflow-hidden">
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-40 h-40 bg-red-600/10 blur-[40px] rounded-full"></div>
+                <h2 className="text-xl md:text-2xl font-black text-white uppercase tracking-[0.2em] relative z-10 flex items-center justify-center gap-3">
+                  <ScrollText className="text-red-500" />
+                  Battle Reports
+                  <ScrollText className="text-red-500" style={{ transform: 'scaleX(-1)' }} />
+                </h2>
+              </div>
+              
+              {/* Scrollable List of Battles */}
+              <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-6 custom-scrollbar bg-gradient-to-b from-stone-900/50 to-stone-950/50">
+                {combatPreviews.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-stone-400 animate-fade-slide-up">
+                      <div className="w-24 h-24 bg-stone-800/50 rounded-full flex items-center justify-center mb-6 border border-stone-700 shadow-inner">
+                          <Tent size={48} className="text-stone-500" />
+                      </div>
+                      <p className="text-xl font-bold text-stone-300">The Realm Knows Peace</p>
+                      <p className="text-sm mt-2">No blood was spilled this turn.</p>
+                  </div>
+                ) : (
+                  combatPreviews.map((preview, index) => {
+                    const primaryAtt = preview.attackers[0];
+                    const attInfo = PLAYERS[primaryAtt.attackerId];
+                    const def = preview.defender;
+                    const defInfo = def.ownerId ? PLAYERS[def.ownerId] : null;
+
+                    return (
+                      <div 
+                        key={preview.targetId} 
+                        className="relative bg-stone-950 border border-stone-700 rounded-3xl overflow-hidden shadow-[0_10px_30px_rgba(0,0,0,0.5)] animate-fade-slide-up"
+                        style={{ animationDelay: `${index * 150}ms` }}
+                      >
+                         {/* Location Header */}
+                         <div className="bg-stone-900 py-3 text-center border-b border-stone-800 relative shadow-md z-10">
+                            <h4 className="font-black text-stone-200 tracking-widest uppercase">{mapConfig.nodes[preview.targetId].name}</h4>
+                         </div>
+
+                         <div className="p-3 md:p-4 flex flex-col">
+                             {/* VS Split Section */}
+                             <div className="flex items-stretch justify-between gap-2 relative">
+                                 
+                                 {/* Attacker Panel */}
+                                 <div className="flex-1 bg-stone-900/80 border border-stone-800 rounded-2xl p-3 flex flex-col items-center relative overflow-hidden">
+                                     <div className={`absolute top-0 w-full h-1.5 ${attInfo.color}`} />
+                                     <Swords className={`mb-1 mt-1 ${attInfo.text}`} size={20} />
+                                     <span className={`font-black text-[11px] uppercase tracking-wider text-center leading-tight mb-3 ${attInfo.text}`}>{attInfo.name}</span>
+                                     <span className="text-5xl font-black text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] leading-none mb-4">{primaryAtt.power}</span>
+                                     
+                                     <div className="w-full space-y-1.5 mt-auto">
+                                         <ModRow label="Marching" val={primaryAtt.base} />
+                                         {primaryAtt.support > 0 && <ModRow label="Support" val={`+${primaryAtt.support}`} color="text-blue-400" bg="bg-blue-950/30 border-blue-900/50" />}
+                                         {primaryAtt.isDragon && <ModRow label="Dragon Bonus" val="+1" color="text-red-400" bg="bg-red-950/30 border-red-900/50" />}
+                                     </div>
+                                 </div>
+
+                                 {/* VS Divider */}
+                                 <div className="flex flex-col items-center justify-center shrink-0 w-8 z-10 relative">
+                                    <div className="absolute top-0 bottom-0 w-px bg-stone-800/80 -z-10"></div>
+                                    <div className="w-8 h-8 rounded-full bg-stone-950 border border-stone-700 flex items-center justify-center shadow-lg">
+                                         <span className="text-stone-500 font-black text-[10px] tracking-wider">VS</span>
+                                    </div>
+                                 </div>
+
+                                 {/* Defender Panel */}
+                                 <div className="flex-1 bg-stone-900/80 border border-stone-800 rounded-2xl p-3 flex flex-col items-center relative overflow-hidden">
+                                     <div className={`absolute top-0 w-full h-1.5 ${defInfo ? defInfo.color : 'bg-stone-500'}`} />
+                                     <Shield className={`mb-1 mt-1 ${defInfo ? defInfo.text : 'text-stone-400'}`} size={20} />
+                                     <span className={`font-black text-[11px] uppercase tracking-wider text-center leading-tight mb-3 ${defInfo ? defInfo.text : 'text-stone-400'}`}>
+                                         {defInfo ? defInfo.name : 'Neutral'}
+                                     </span>
+                                     <span className="text-5xl font-black text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] leading-none mb-4">{def.power}</span>
+
+                                     <div className="w-full space-y-1.5 mt-auto">
+                                         <ModRow label="Garrison" val={def.base} />
+                                         {def.support > 0 && <ModRow label="Support" val={`+${def.support}`} color="text-blue-400" bg="bg-blue-950/30 border-blue-900/50" />}
+                                         {def.isDefending && <ModRow label="Defend Order" val={`+${def.base}`} color="text-green-400" bg="bg-green-950/30 border-green-900/50" />}
+                                         {def.isWolf && <ModRow label="Wolf Bonus" val="+1" color="text-stone-300" bg="bg-stone-700/30 border-stone-600/50" />}
+                                         {def.isCastle && <ModRow label="Castle Walls" val="+1" color="text-yellow-500" bg="bg-yellow-950/30 border-yellow-900/50" />}
+                                         {def.isRebellion && <ModRow label="Rebellion" val="+1" color="text-orange-500" bg="bg-orange-950/30 border-orange-900/50" />}
+                                     </div>
+                                 </div>
+                             </div>
+
+                             {/* Secondary Attackers (if any) */}
+                             {preview.attackers.length > 1 && (
+                                 <div className="mt-3 pt-3 border-t border-stone-800">
+                                     <span className="text-[10px] text-stone-500 font-bold uppercase tracking-widest block mb-2 text-center">Additional Assailants</span>
+                                     <div className="flex flex-col gap-2">
+                                         {preview.attackers.slice(1).map(att => {
+                                             const pInfoOther = PLAYERS[att.attackerId];
+                                             return (
+                                                 <div key={att.attackerId} className={`flex justify-between items-center bg-stone-900/50 p-2.5 rounded-xl border border-stone-800 border-l-4 ${pInfoOther.border}`}>
+                                                     <div className="flex items-center gap-2">
+                                                         <Swords size={14} className={pInfoOther.text} />
+                                                         <span className={`text-xs font-bold ${pInfoOther.text}`}>{pInfoOther.name}</span>
+                                                     </div>
+                                                     <div className="flex items-center gap-2 bg-stone-950 px-2 py-0.5 rounded-md border border-stone-800">
+                                                         <span className="text-[10px] uppercase text-stone-400 font-bold">Power</span>
+                                                         <span className="text-lg font-black text-white">{att.power}</span>
+                                                     </div>
+                                                 </div>
+                                             );
+                                         })}
+                                     </div>
+                                 </div>
+                             )}
+                         </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Action Footer */}
+              <div className="bg-stone-950 p-5 border-t border-stone-800 shrink-0">
+                <button 
+                  onClick={resolveTurn}
+                  className="w-full relative group overflow-hidden bg-red-700 hover:bg-red-600 text-white font-black py-4 rounded-xl shadow-[0_0_30px_rgba(185,28,28,0.4)] flex justify-center items-center gap-3 text-xl active:scale-95 transition-all"
+                >
+                  <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]"></div>
+                  Resolve Bloodshed <Swords size={22} className="group-hover:rotate-12 transition-transform drop-shadow-md"/>
+                </button>
+              </div>
+            </div>
         </div>
       </div>
     );
@@ -986,7 +1013,6 @@ export default function App() {
   return (
     <div className="min-h-screen bg-stone-950 text-stone-200 font-sans flex flex-col overflow-hidden fixed inset-0">
       
-      {/* Header */}
       <header className="bg-stone-900 border-b border-stone-800 p-4 pt-safe shadow-md flex justify-between items-center z-20 shrink-0">
         <div className="flex items-center gap-2">
           <Crown className="text-yellow-500" size={24} />
@@ -1000,7 +1026,6 @@ export default function App() {
         </button>
       </header>
 
-      {/* Main Content Area based on Tab */}
       <main className="flex-1 relative overflow-hidden flex flex-col">
         
         {/* MAP TAB */}
@@ -1059,7 +1084,6 @@ export default function App() {
 
       </main>
 
-      {/* Mobile Bottom Navigation */}
       <nav className="bg-stone-900 border-t border-stone-800 pb-safe shrink-0 z-20 flex justify-around p-2">
         <button onClick={() => setActiveTab('map')} className={`flex flex-col items-center p-2 w-20 transition-colors ${activeTab === 'map' ? 'text-white' : 'text-stone-500 hover:text-stone-300'}`}>
           <MapIcon size={24} className="mb-1" />
@@ -1086,6 +1110,17 @@ export default function App() {
         
         @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
         .animate-slide-up { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+        @keyframes fadeSlideUp { 
+          from { opacity: 0; transform: translateY(20px); } 
+          to { opacity: 1; transform: translateY(0); } 
+        }
+        .animate-fade-slide-up { 
+          animation: fadeSlideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; 
+          opacity: 0; 
+        }
+
+        @keyframes shimmer { 100% { transform: translateX(100%); } }
 
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
