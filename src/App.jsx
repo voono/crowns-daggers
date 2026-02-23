@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useLayoutEffect } from 'react';
 import { Swords, Shield, Handshake, Tent, Crown, ChevronRight, AlertCircle, Castle, Sparkles, Users, Map as MapIcon, ScrollText, History, X, Check } from 'lucide-react';
 
 // --- GAME CONFIGURATION & CONSTANTS ---
@@ -99,23 +99,29 @@ const MAP_CONFIGS = {
 
 // A hook to handle multi-touch panning and pinch-to-zoom
 const usePanZoom = (containerRef) => {
-  const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
+  const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1, ready: false });
   const isDragging = useRef(false);
   const dragStart = useRef({ x: 0, y: 0 });
   const pinchStartDist = useRef(null);
   const pinchStartScale = useRef(null);
 
-  // Center map initially based on screen size
-  useEffect(() => {
+  // Center map initially based on screen size using useLayoutEffect to prevent visual jump
+  useLayoutEffect(() => {
     if (!containerRef.current) return;
     const { clientWidth, clientHeight } = containerRef.current;
-    const initialScale = Math.min(clientWidth / 1200, clientHeight / 1200) * 0.9; 
+    
+    // Fallback in case the container hasn't sized yet
+    const w = clientWidth || window.innerWidth;
+    const h = clientHeight || window.innerHeight;
+    
+    const initialScale = Math.min(w / 1200, h / 1200) * 0.9; 
     setTransform({
-      x: (clientWidth - 1000 * initialScale) / 2,
-      y: (clientHeight - 1000 * initialScale) / 2,
-      scale: Math.max(0.4, initialScale)
+      x: (w - 1000 * initialScale) / 2,
+      y: (h - 1000 * initialScale) / 2,
+      scale: Math.max(0.4, initialScale),
+      ready: true
     });
-  }, [containerRef]);
+  }, []); // Only run once on mount
 
   useEffect(() => {
     const element = containerRef.current;
@@ -331,9 +337,9 @@ const FullScreenMap = ({
   return (
     <div className="relative w-full h-full bg-stone-950 overflow-hidden touch-none" ref={containerRef}>
       
-      {/* Transform Container */}
+      {/* Transform Container with opacity fade-in driven by transform.ready */}
       <div 
-        className="absolute top-0 left-0 w-[1000px] h-[1000px] origin-top-left will-change-transform"
+        className={`absolute top-0 left-0 w-[1000px] h-[1000px] origin-top-left will-change-transform transition-opacity duration-500 ease-in-out ${transform.ready ? 'opacity-100' : 'opacity-0'}`}
         style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }}
       >
         {/* Background Texture / Grid (Optional visual aid) */}
@@ -705,16 +711,30 @@ export default function App() {
   if (phase === 'PASS') {
     const p = PLAYERS[playerOrder[currentPlayerIdx]];
     return (
-      <div className={`fixed inset-0 ${p.color.replace('bg-', 'bg-').replace('500', '900')} flex flex-col items-center justify-center p-6 text-center z-50 animate-fade-in`}>
-        <Shield size={100} className={p.text} />
-        <h2 className="text-5xl font-black mt-8 mb-4 text-white">Pass Device to <br/><span className={p.text}>{p.name}</span></h2>
-        <p className="text-stone-300 mb-16 text-xl">Ensure your screen is hidden.</p>
-        <button 
-          onClick={() => setPhase('SECRET')}
-          className={`font-black text-2xl py-6 px-12 w-full max-w-sm rounded-2xl shadow-2xl active:scale-95 transition-transform ${p.color} text-stone-900`}
-        >
-          I am {p.name}
-        </button>
+      <div className="fixed inset-0 bg-stone-950 flex flex-col items-center justify-center p-6 text-center z-50 animate-fade-in overflow-hidden">
+        {/* Decorative background element */}
+        <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[150vw] h-[150vw] md:w-[80vw] md:h-[80vw] opacity-10 blur-3xl rounded-full ${p.color}`}></div>
+
+        <div className="relative z-10 flex flex-col items-center w-full max-w-md">
+          <div className={`mb-8 p-6 rounded-full border-4 ${p.border} bg-stone-900 shadow-2xl`}>
+            <Shield size={80} className={p.text} />
+          </div>
+          <h2 className="text-3xl md:text-4xl font-black mb-2 text-white uppercase tracking-widest">Pass Device To</h2>
+          <h1 className={`text-5xl md:text-6xl font-black mb-6 ${p.text} drop-shadow-lg`}>{p.name}</h1>
+
+          <div className="bg-stone-900/80 border border-stone-800 rounded-xl p-4 mb-12 w-full backdrop-blur-sm shadow-xl">
+            <p className="text-stone-300 text-lg flex items-center justify-center gap-2">
+              <AlertCircle size={24} className="text-red-500" /> Keep orders secret.
+            </p>
+          </div>
+
+          <button 
+            onClick={() => setPhase('SECRET')}
+            className={`w-full font-black text-2xl py-6 rounded-2xl shadow-[0_0_20px_rgba(0,0,0,0.5)] active:scale-95 transition-transform ${p.color} text-stone-900`}
+          >
+            I am {p.name}
+          </button>
+        </div>
       </div>
     );
   }
