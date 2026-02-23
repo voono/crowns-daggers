@@ -97,7 +97,6 @@ const MAP_CONFIGS = {
 
 // --- HELPER COMPONENTS ---
 
-// Mini sub-component for cleanly rendering stat breakdown pills in the battle view
 const ModRow = ({ label, val, color = "text-stone-300", bg = "bg-stone-900/60" }) => (
   <div className={`flex justify-between items-center ${bg} px-2.5 py-1.5 rounded-lg border border-stone-800/50`}>
       <span className="text-stone-400 font-bold uppercase tracking-wider text-[10px]">{label}</span>
@@ -106,11 +105,18 @@ const ModRow = ({ label, val, color = "text-stone-300", bg = "bg-stone-900/60" }
 );
 
 
-// A hook to handle multi-touch panning and pinch-to-zoom
+// Refactored and Fixed pan/zoom hook for perfect centering and accurate multi-touch
 const usePanZoom = (containerRef) => {
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1, ready: false });
+  
+  // Use a ref for transform to prevent stale states in event listeners without re-binding
+  const transformRef = useRef(transform);
+  useEffect(() => { transformRef.current = transform; }, [transform]);
+
   const isDragging = useRef(false);
+  const hasMovedRef = useRef(false); // To distinguish clicks from panning
   const dragStart = useRef({ x: 0, y: 0 });
+  const touchStartPos = useRef({ x: 0, y: 0 });
   const pinchStartDist = useRef(null);
   const pinchStartScale = useRef(null);
 
@@ -121,14 +127,17 @@ const usePanZoom = (containerRef) => {
     const w = clientWidth || window.innerWidth;
     const h = clientHeight || window.innerHeight;
     
-    const initialScale = Math.min(w / 1200, h / 1200) * 0.9; 
+    // FIX 2: Calculate scale safely, then use that exact scale for centering x and y
+    const baseScale = Math.min(w / 1000, h / 1000) * 0.95;
+    const clampedScale = Math.max(0.2, baseScale);
+    
     setTransform({
-      x: (w - 1000 * initialScale) / 2,
-      y: (h - 1000 * initialScale) / 2,
-      scale: Math.max(0.4, initialScale),
+      x: (w - 1000 * clampedScale) / 2,
+      y: (h - 1000 * clampedScale) / 2,
+      scale: clampedScale,
       ready: true
     });
-  }, []);
+  }, [containerRef]);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -136,11 +145,14 @@ const usePanZoom = (containerRef) => {
 
     const handleTouchStart = (e) => {
       e.preventDefault(); 
+      hasMovedRef.current = false;
+
       if (e.touches.length === 1) {
         isDragging.current = true;
+        touchStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
         dragStart.current = {
-          x: e.touches[0].clientX - transform.x,
-          y: e.touches[0].clientY - transform.y
+          x: e.touches[0].clientX - transformRef.current.x,
+          y: e.touches[0].clientY - transformRef.current.y
         };
       } else if (e.touches.length === 2) {
         isDragging.current = false;
@@ -149,25 +161,30 @@ const usePanZoom = (containerRef) => {
           e.touches[0].clientY - e.touches[1].clientY
         );
         pinchStartDist.current = dist;
-        pinchStartScale.current = transform.scale;
+        pinchStartScale.current = transformRef.current.scale;
       }
     };
 
     const handleTouchMove = (e) => {
       e.preventDefault();
       if (e.touches.length === 1 && isDragging.current) {
+        const dx = e.touches[0].clientX - touchStartPos.current.x;
+        const dy = e.touches[0].clientY - touchStartPos.current.y;
+        if (Math.hypot(dx, dy) > 5) hasMovedRef.current = true; // Drag threshold
+
         setTransform(prev => ({
           ...prev,
           x: e.touches[0].clientX - dragStart.current.x,
           y: e.touches[0].clientY - dragStart.current.y
         }));
       } else if (e.touches.length === 2 && pinchStartDist.current) {
+        hasMovedRef.current = true;
         const dist = Math.hypot(
           e.touches[0].clientX - e.touches[1].clientX,
           e.touches[0].clientY - e.touches[1].clientY
         );
         const scaleFactor = dist / pinchStartDist.current;
-        const newScale = Math.min(Math.max(0.3, pinchStartScale.current * scaleFactor), 3);
+        const newScale = Math.min(Math.max(0.2, pinchStartScale.current * scaleFactor), 3);
         setTransform(prev => ({ ...prev, scale: newScale }));
       }
     };
@@ -179,19 +196,28 @@ const usePanZoom = (containerRef) => {
 
     const handleMouseDown = (e) => {
       isDragging.current = true;
-      dragStart.current = { x: e.clientX - transform.x, y: e.clientY - transform.y };
+      hasMovedRef.current = false;
+      touchStartPos.current = { x: e.clientX, y: e.clientY };
+      dragStart.current = { x: e.clientX - transformRef.current.x, y: e.clientY - transformRef.current.y };
     };
+    
     const handleMouseMove = (e) => {
       if (!isDragging.current) return;
+      const dx = e.clientX - touchStartPos.current.x;
+      const dy = e.clientY - touchStartPos.current.y;
+      if (Math.hypot(dx, dy) > 5) hasMovedRef.current = true;
+
       setTransform(prev => ({
         ...prev, x: e.clientX - dragStart.current.x, y: e.clientY - dragStart.current.y
       }));
     };
+    
     const handleMouseUp = () => isDragging.current = false;
+    
     const handleWheel = (e) => {
       e.preventDefault();
       const scaleAdj = e.deltaY > 0 ? 0.9 : 1.1;
-      setTransform(prev => ({ ...prev, scale: Math.min(Math.max(0.3, prev.scale * scaleAdj), 3) }));
+      setTransform(prev => ({ ...prev, scale: Math.min(Math.max(0.2, prev.scale * scaleAdj), 3) }));
     };
 
     element.addEventListener('touchstart', handleTouchStart, { passive: false });
@@ -211,9 +237,9 @@ const usePanZoom = (containerRef) => {
       window.removeEventListener('mouseup', handleMouseUp);
       element.removeEventListener('wheel', handleWheel);
     };
-  }, [transform, containerRef]);
+  }, [containerRef]);
 
-  return transform;
+  return { transform, hasMovedRef };
 };
 
 // Bottom Drawer Action Sheet for Mobile
@@ -312,7 +338,7 @@ const FullScreenMap = ({
   setOrders, selectedNode, setSelectedNode, pendingAction, setPendingAction, mapData, currentEvent
 }) => {
   const containerRef = useRef(null);
-  const transform = usePanZoom(containerRef);
+  const { transform, hasMovedRef } = usePanZoom(containerRef);
 
   const getNeighbors = (id) => mapData[id].connections;
 
@@ -333,133 +359,142 @@ const FullScreenMap = ({
   };
 
   return (
-    <div className="relative w-full h-full bg-stone-950 overflow-hidden touch-none" ref={containerRef}>
-      <div 
-        className={`absolute top-0 left-0 w-[1000px] h-[1000px] origin-top-left will-change-transform transition-opacity duration-500 ease-in-out ${transform.ready ? 'opacity-100' : 'opacity-0'}`}
-        style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }}
-      >
-        <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(#444 2px, transparent 2px)', backgroundSize: '40px 40px' }} />
+    <div className="relative w-full h-full bg-stone-950 overflow-hidden touch-none">
+      
+      {/* ContainerRef is now only covering the map pane itself, safely separating touch logic from UI Drawer */}
+      <div className="absolute inset-0 w-full h-full" ref={containerRef}>
+        <div 
+          className={`absolute top-0 left-0 w-[1000px] h-[1000px] origin-top-left will-change-transform transition-opacity duration-500 ease-in-out ${transform.ready ? 'opacity-100' : 'opacity-0'}`}
+          style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})` }}
+        >
+          <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(#444 2px, transparent 2px)', backgroundSize: '40px 40px' }} />
 
-        <svg className="absolute inset-0 w-full h-full pointer-events-none">
-          {Object.values(mapData).map(node => (
-            node.connections.map(targetId => {
-              const target = mapData[targetId];
-              if (node.id < targetId) {
+          <svg className="absolute inset-0 w-full h-full pointer-events-none">
+            {Object.values(mapData).map(node => (
+              node.connections.map(targetId => {
+                const target = mapData[targetId];
+                if (node.id < targetId) {
+                  return (
+                    <line key={`${node.id}-${targetId}`} x1={`${node.x}%`} y1={`${node.y}%`} x2={`${target.x}%`} y2={`${target.y}%`} stroke="#333" strokeWidth="4" strokeDasharray="8 6" className="opacity-60" />
+                  );
+                }
+                return null;
+              })
+            ))}
+            
+            {Object.entries(orders).map(([sourceId, order]) => {
+              if (!showAllOrders && (!currentPlayerId || territories[sourceId].ownerId !== currentPlayerId)) return null;
+              if (order.type === 'MARCH' || order.type === 'SUPPORT') {
+                const source = mapData[sourceId];
+                const target = mapData[order.targetId];
+                const isSupport = order.type === 'SUPPORT';
+                const isFriendly = order.type === 'MARCH' && territories[order.targetId].ownerId === territories[sourceId].ownerId;
+                
+                let strokeColor = "#ef4444"; 
+                if (isSupport) strokeColor = "#3b82f6"; 
+                else if (isFriendly) strokeColor = "#a8a29e"; 
+
+                const dx = target.x - source.x;
+                const dy = target.y - source.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const sourceOffset = 4;
+                const targetOffset = 4.0; 
+                
+                let startX = source.x;
+                let startY = source.y;
+                let endX = target.x;
+                let endY = target.y;
+
+                if (dist > (sourceOffset + targetOffset)) {
+                  startX = source.x + (dx * sourceOffset) / dist;
+                  startY = source.y + (dy * sourceOffset) / dist;
+                  endX = source.x + (dx * (dist - targetOffset)) / dist;
+                  endY = source.y + (dy * (dist - targetOffset)) / dist;
+                }
+
                 return (
-                  <line key={`${node.id}-${targetId}`} x1={`${node.x}%`} y1={`${node.y}%`} x2={`${target.x}%`} y2={`${target.y}%`} stroke="#333" strokeWidth="4" strokeDasharray="8 6" className="opacity-60" />
+                  <line 
+                    key={`order-${sourceId}`} 
+                    x1={`${startX}%`} y1={`${startY}%`} 
+                    x2={`${endX}%`} y2={`${endY}%`} 
+                    stroke={strokeColor} 
+                    strokeWidth="6" 
+                    markerEnd="url(#arrowhead)" 
+                    className="animate-pulse shadow-lg drop-shadow-md" 
+                  />
                 );
               }
               return null;
-            })
-          ))}
-          
-          {Object.entries(orders).map(([sourceId, order]) => {
-            if (!showAllOrders && (!currentPlayerId || territories[sourceId].ownerId !== currentPlayerId)) return null;
-            if (order.type === 'MARCH' || order.type === 'SUPPORT') {
-              const source = mapData[sourceId];
-              const target = mapData[order.targetId];
-              const isSupport = order.type === 'SUPPORT';
-              const isFriendly = order.type === 'MARCH' && territories[order.targetId].ownerId === territories[sourceId].ownerId;
-              
-              let strokeColor = "#ef4444"; 
-              if (isSupport) strokeColor = "#3b82f6"; 
-              else if (isFriendly) strokeColor = "#a8a29e"; 
+            })}
+            <defs>
+              <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+                <polygon points="0 0, 8 3, 0 6" fill="#fff" opacity="0.8"/>
+              </marker>
+            </defs>
+          </svg>
 
-              const dx = target.x - source.x;
-              const dy = target.y - source.y;
-              const dist = Math.sqrt(dx * dx + dy * dy);
-              const sourceOffset = 4;
-              const targetOffset = 4.0; 
-              
-              let startX = source.x;
-              let startY = source.y;
-              let endX = target.x;
-              let endY = target.y;
+          {Object.values(mapData).map(node => {
+            const tState = territories[node.id];
+            const owner = tState.ownerId ? PLAYERS[tState.ownerId] : null;
+            const isSelected = selectedNode === node.id;
+            const isTargetable = pendingAction && selectedNode && getNeighbors(selectedNode).includes(node.id);
+            const isCastle = node.isCastle;
+            const nodeOrder = orders[node.id];
+            const showOrder = Boolean(nodeOrder && (showAllOrders || (currentPlayerId && tState.ownerId === currentPlayerId)));
+            const isDimmed = pendingAction && !isTargetable && selectedNode !== node.id;
 
-              if (dist > (sourceOffset + targetOffset)) {
-                startX = source.x + (dx * sourceOffset) / dist;
-                startY = source.y + (dy * sourceOffset) / dist;
-                endX = source.x + (dx * (dist - targetOffset)) / dist;
-                endY = source.y + (dy * (dist - targetOffset)) / dist;
-              }
+            return (
+              <div
+                key={node.id}
+                className={`absolute transform -translate-x-1/2 -translate-y-1/2 transition-all duration-300
+                  ${isTargetable ? 'scale-110 z-30 cursor-crosshair' : ''}
+                  ${isSelected ? 'scale-125 z-40' : 'z-20 hover:scale-105'}
+                  ${isDimmed ? 'opacity-30' : 'opacity-100'}
+                `}
+                style={{ left: `${node.x}%`, top: `${node.y}%` }}
+                onClick={(e) => { 
+                  e.stopPropagation(); 
+                  if (!hasMovedRef.current) handleNodeClick(node.id); 
+                }}
+                onTouchEnd={(e) => { 
+                  e.stopPropagation();
+                  if (!hasMovedRef.current) handleNodeClick(node.id); 
+                }}
+              >
+                <div className="absolute -top-10 left-1/2 transform -translate-x-1/2 whitespace-nowrap text-sm font-black tracking-wide text-stone-300 bg-stone-900/90 px-3 py-1 rounded-md border border-stone-700/50 shadow-md backdrop-blur-sm">
+                  {node.name}
+                </div>
 
-              return (
-                <line 
-                  key={`order-${sourceId}`} 
-                  x1={`${startX}%`} y1={`${startY}%`} 
-                  x2={`${endX}%`} y2={`${endY}%`} 
-                  stroke={strokeColor} 
-                  strokeWidth="6" 
-                  markerEnd="url(#arrowhead)" 
-                  className="animate-pulse shadow-lg drop-shadow-md" 
-                />
-              );
-            }
-            return null;
-          })}
-          <defs>
-            <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-              <polygon points="0 0, 8 3, 0 6" fill="#fff" opacity="0.8"/>
-            </marker>
-          </defs>
-        </svg>
-
-        {Object.values(mapData).map(node => {
-          const tState = territories[node.id];
-          const owner = tState.ownerId ? PLAYERS[tState.ownerId] : null;
-          const isSelected = selectedNode === node.id;
-          const isTargetable = pendingAction && selectedNode && getNeighbors(selectedNode).includes(node.id);
-          const isCastle = node.isCastle;
-          const nodeOrder = orders[node.id];
-          const showOrder = Boolean(nodeOrder && (showAllOrders || (currentPlayerId && tState.ownerId === currentPlayerId)));
-          const isDimmed = pendingAction && !isTargetable && selectedNode !== node.id;
-
-          return (
-            <div
-              key={node.id}
-              className={`absolute transform -translate-x-1/2 -translate-y-1/2 transition-all duration-300
-                ${isTargetable ? 'scale-110 z-30 cursor-crosshair' : ''}
-                ${isSelected ? 'scale-125 z-40' : 'z-20 hover:scale-105'}
-                ${isDimmed ? 'opacity-30' : 'opacity-100'}
-              `}
-              style={{ left: `${node.x}%`, top: `${node.y}%` }}
-              onClick={(e) => { e.stopPropagation(); handleNodeClick(node.id); }}
-              onTouchEnd={(e) => { 
-                if (!containerRef.current.isDragging) handleNodeClick(node.id); 
-              }}
-            >
-              <div className="absolute -top-10 left-1/2 transform -translate-x-1/2 whitespace-nowrap text-sm font-black tracking-wide text-stone-300 bg-stone-900/90 px-3 py-1 rounded-md border border-stone-700/50 shadow-md backdrop-blur-sm">
-                {node.name}
-              </div>
-
-              {isCastle && (
-                 <div className="absolute -top-3 -left-3 bg-stone-800 rounded-full p-1.5 border-2 border-stone-600 shadow-xl z-30">
-                    <Castle size={16} className="text-stone-300" />
-                 </div>
-              )}
-
-              <div className={`w-20 h-20 rounded-full border-4 flex items-center justify-center relative shadow-2xl transition-all
-                ${owner ? owner.color : NEUTRAL_COLOR}
-                ${owner ? owner.border : NEUTRAL_BORDER}
-                ${isTargetable ? 'ring-8 ring-white/50 animate-pulse' : ''}
-                ${isSelected ? 'ring-4 ring-yellow-400 shadow-[0_0_30px_rgba(250,204,21,0.6)]' : ''}
-              `}>
-                <span className="text-3xl font-black text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">{tState.units}</span>
-                
-                {showOrder && (
-                  <div className="absolute -bottom-4 -right-4 w-10 h-10 bg-stone-900 rounded-full border-2 border-stone-400 flex items-center justify-center shadow-xl text-white z-30">
-                    {nodeOrder.type === 'MARCH' && <Swords size={20} className="text-red-400"/>}
-                    {nodeOrder.type === 'DEFEND' && <Shield size={20} className="text-green-400"/>}
-                    {nodeOrder.type === 'SUPPORT' && <Handshake size={20} className="text-blue-400"/>}
-                    {nodeOrder.type === 'MUSTER' && <Tent size={20} className="text-yellow-400"/>}
+                {isCastle && (
+                  <div className="absolute -top-3 -left-3 bg-stone-800 rounded-full p-1.5 border-2 border-stone-600 shadow-xl z-30">
+                      <Castle size={16} className="text-stone-300" />
                   </div>
                 )}
+
+                <div className={`w-20 h-20 rounded-full border-4 flex items-center justify-center relative shadow-2xl transition-all
+                  ${owner ? owner.color : NEUTRAL_COLOR}
+                  ${owner ? owner.border : NEUTRAL_BORDER}
+                  ${isTargetable ? 'ring-8 ring-white/50 animate-pulse' : ''}
+                  ${isSelected ? 'ring-4 ring-yellow-400 shadow-[0_0_30px_rgba(250,204,21,0.6)]' : ''}
+                `}>
+                  <span className="text-3xl font-black text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">{tState.units}</span>
+                  
+                  {showOrder && (
+                    <div className="absolute -bottom-4 -right-4 w-10 h-10 bg-stone-900 rounded-full border-2 border-stone-400 flex items-center justify-center shadow-xl text-white z-30">
+                      {nodeOrder.type === 'MARCH' && <Swords size={20} className="text-red-400"/>}
+                      {nodeOrder.type === 'DEFEND' && <Shield size={20} className="text-green-400"/>}
+                      {nodeOrder.type === 'SUPPORT' && <Handshake size={20} className="text-blue-400"/>}
+                      {nodeOrder.type === 'MUSTER' && <Tent size={20} className="text-yellow-400"/>}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
+      {/* Drawer Overlay (FIX 1: Now outside containerRef so it safely receives all touch/click events natively) */}
       {interactive && (
         <OrderDrawer 
           selectedNode={selectedNode} pendingAction={pendingAction} territories={territories}
@@ -839,11 +874,9 @@ export default function App() {
     );
   }
 
-  // --- REDESIGNED REVEAL PHASE ---
   if (phase === 'REVEAL') {
     return (
       <div className="fixed inset-0 bg-stone-950 flex flex-col z-50 animate-fade-in">
-        {/* Render Map Context Behind Modal */}
         <div className="absolute inset-0 z-0">
           <FullScreenMap 
             showAllOrders={true} territories={territories} orders={orders} setOrders={setOrders} 
@@ -851,11 +884,9 @@ export default function App() {
           />
         </div>
 
-        {/* Modal Overlay */}
         <div className="absolute inset-0 flex flex-col items-center justify-center p-4 z-40 pointer-events-none bg-stone-950/70 backdrop-blur-sm">
             <div className="bg-stone-900/95 border-2 border-stone-700 rounded-[2rem] shadow-2xl pointer-events-auto w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden ring-1 ring-white/10">
               
-              {/* Header */}
               <div className="bg-stone-950 p-5 border-b border-stone-800 shrink-0 text-center relative overflow-hidden">
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-40 h-40 bg-red-600/10 blur-[40px] rounded-full"></div>
                 <h2 className="text-xl md:text-2xl font-black text-white uppercase tracking-[0.2em] relative z-10 flex items-center justify-center gap-3">
@@ -865,7 +896,6 @@ export default function App() {
                 </h2>
               </div>
               
-              {/* Scrollable List of Battles */}
               <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-6 custom-scrollbar bg-gradient-to-b from-stone-900/50 to-stone-950/50">
                 {combatPreviews.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-16 text-stone-400 animate-fade-slide-up">
@@ -888,16 +918,13 @@ export default function App() {
                         className="relative bg-stone-950 border border-stone-700 rounded-3xl overflow-hidden shadow-[0_10px_30px_rgba(0,0,0,0.5)] animate-fade-slide-up"
                         style={{ animationDelay: `${index * 150}ms` }}
                       >
-                         {/* Location Header */}
                          <div className="bg-stone-900 py-3 text-center border-b border-stone-800 relative shadow-md z-10">
                             <h4 className="font-black text-stone-200 tracking-widest uppercase">{mapConfig.nodes[preview.targetId].name}</h4>
                          </div>
 
                          <div className="p-3 md:p-4 flex flex-col">
-                             {/* VS Split Section */}
                              <div className="flex items-stretch justify-between gap-2 relative">
                                  
-                                 {/* Attacker Panel */}
                                  <div className="flex-1 bg-stone-900/80 border border-stone-800 rounded-2xl p-3 flex flex-col items-center relative overflow-hidden">
                                      <div className={`absolute top-0 w-full h-1.5 ${attInfo.color}`} />
                                      <Swords className={`mb-1 mt-1 ${attInfo.text}`} size={20} />
@@ -911,7 +938,6 @@ export default function App() {
                                      </div>
                                  </div>
 
-                                 {/* VS Divider */}
                                  <div className="flex flex-col items-center justify-center shrink-0 w-8 z-10 relative">
                                     <div className="absolute top-0 bottom-0 w-px bg-stone-800/80 -z-10"></div>
                                     <div className="w-8 h-8 rounded-full bg-stone-950 border border-stone-700 flex items-center justify-center shadow-lg">
@@ -919,7 +945,6 @@ export default function App() {
                                     </div>
                                  </div>
 
-                                 {/* Defender Panel */}
                                  <div className="flex-1 bg-stone-900/80 border border-stone-800 rounded-2xl p-3 flex flex-col items-center relative overflow-hidden">
                                      <div className={`absolute top-0 w-full h-1.5 ${defInfo ? defInfo.color : 'bg-stone-500'}`} />
                                      <Shield className={`mb-1 mt-1 ${defInfo ? defInfo.text : 'text-stone-400'}`} size={20} />
@@ -939,7 +964,6 @@ export default function App() {
                                  </div>
                              </div>
 
-                             {/* Secondary Attackers (if any) */}
                              {preview.attackers.length > 1 && (
                                  <div className="mt-3 pt-3 border-t border-stone-800">
                                      <span className="text-[10px] text-stone-500 font-bold uppercase tracking-widest block mb-2 text-center">Additional Assailants</span>
@@ -969,7 +993,6 @@ export default function App() {
                 )}
               </div>
 
-              {/* Action Footer */}
               <div className="bg-stone-950 p-5 border-t border-stone-800 shrink-0">
                 <button 
                   onClick={resolveTurn}
@@ -985,7 +1008,6 @@ export default function App() {
     );
   }
 
-  // GAME_OVER Phase (Full screen map overlay)
   if (phase === 'GAME_OVER') {
     return (
       <div className="fixed inset-0 bg-stone-950 flex flex-col z-50 animate-fade-in">
