@@ -105,16 +105,14 @@ const ModRow = ({ label, val, color = "text-stone-300", bg = "bg-stone-900/60" }
 );
 
 
-// Refactored and Fixed pan/zoom hook for perfect centering and accurate multi-touch
 const usePanZoom = (containerRef) => {
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1, ready: false });
   
-  // Use a ref for transform to prevent stale states in event listeners without re-binding
   const transformRef = useRef(transform);
   useEffect(() => { transformRef.current = transform; }, [transform]);
 
   const isDragging = useRef(false);
-  const hasMovedRef = useRef(false); // To distinguish clicks from panning
+  const hasMovedRef = useRef(false); 
   const dragStart = useRef({ x: 0, y: 0 });
   const touchStartPos = useRef({ x: 0, y: 0 });
   const pinchStartDist = useRef(null);
@@ -127,7 +125,6 @@ const usePanZoom = (containerRef) => {
     const w = clientWidth || window.innerWidth;
     const h = clientHeight || window.innerHeight;
     
-    // FIX 2: Calculate scale safely, then use that exact scale for centering x and y
     const baseScale = Math.min(w / 1000, h / 1000) * 0.95;
     const clampedScale = Math.max(0.2, baseScale);
     
@@ -170,7 +167,7 @@ const usePanZoom = (containerRef) => {
       if (e.touches.length === 1 && isDragging.current) {
         const dx = e.touches[0].clientX - touchStartPos.current.x;
         const dy = e.touches[0].clientY - touchStartPos.current.y;
-        if (Math.hypot(dx, dy) > 5) hasMovedRef.current = true; // Drag threshold
+        if (Math.hypot(dx, dy) > 5) hasMovedRef.current = true; 
 
         setTransform(prev => ({
           ...prev,
@@ -242,7 +239,6 @@ const usePanZoom = (containerRef) => {
   return { transform, hasMovedRef };
 };
 
-// Bottom Drawer Action Sheet for Mobile
 const OrderDrawer = ({ 
   selectedNode, pendingAction, territories, mapNodes, currentPlayerId, currentEvent,
   onSetPendingAction, onSetOrder, onCancel
@@ -257,7 +253,7 @@ const OrderDrawer = ({
   const canSupport = currentEvent.id !== 'FOG_OF_WAR';
 
   return (
-    <div className="absolute bottom-0 left-0 right-0 bg-stone-900 border-t-2 border-stone-700 rounded-t-3xl p-6 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] z-50 animate-slide-up pb-safe">
+    <div className="absolute bottom-0 left-0 right-0 bg-stone-900 border-t-2 border-stone-700 rounded-t-3xl p-6 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] z-[60] animate-slide-up pb-safe">
       <div className="w-12 h-1.5 bg-stone-700 rounded-full mx-auto mb-4" />
 
       {pendingAction ? (
@@ -332,7 +328,6 @@ const OrderDrawer = ({
 };
 
 
-// Main Immersive Map Viewer
 const FullScreenMap = ({ 
   interactive = false, currentPlayerId = null, showAllOrders = false, territories, orders, 
   setOrders, selectedNode, setSelectedNode, pendingAction, setPendingAction, mapData, currentEvent
@@ -361,7 +356,6 @@ const FullScreenMap = ({
   return (
     <div className="relative w-full h-full bg-stone-950 overflow-hidden touch-none">
       
-      {/* ContainerRef is now only covering the map pane itself, safely separating touch logic from UI Drawer */}
       <div className="absolute inset-0 w-full h-full" ref={containerRef}>
         <div 
           className={`absolute top-0 left-0 w-[1000px] h-[1000px] origin-top-left will-change-transform transition-opacity duration-500 ease-in-out ${transform.ready ? 'opacity-100' : 'opacity-0'}`}
@@ -494,7 +488,6 @@ const FullScreenMap = ({
         </div>
       </div>
 
-      {/* Drawer Overlay (FIX 1: Now outside containerRef so it safely receives all touch/click events natively) */}
       {interactive && (
         <OrderDrawer 
           selectedNode={selectedNode} pendingAction={pendingAction} territories={territories}
@@ -510,6 +503,8 @@ const FullScreenMap = ({
 
 // --- MAIN APPLICATION COMPONENT ---
 export default function App() {
+  const [showResetModal, setShowResetModal] = useState(false);
+
   const [playerCount, setPlayerCount] = useState(3);
   const [mapConfig, setMapConfig] = useState(MAP_CONFIGS[3]);
 
@@ -598,7 +593,7 @@ export default function App() {
           isCastle,
           isRebellion
         }
-      };
+      }
     });
   }, [phase, orders, territories, currentEvent.id, mapConfig.nodes]);
 
@@ -787,7 +782,7 @@ export default function App() {
 
   if (phase === 'TITLE') {
     return (
-      <div className="fixed inset-0 bg-stone-950 flex flex-col items-center justify-center p-6 text-center text-stone-200 animate-fade-in z-50 overflow-auto">
+      <div className="h-[100dvh] w-full bg-stone-950 flex flex-col items-center justify-center p-6 text-center text-stone-200 animate-fade-in z-50 overflow-auto fixed inset-0">
         <Crown size={100} className="text-yellow-500 mb-6 drop-shadow-[0_0_20px_rgba(234,179,8,0.4)]" />
         <h1 className="text-5xl md:text-7xl font-black mb-4 uppercase tracking-tighter leading-tight">
           Crowns <br/><span className="text-red-600">&</span> Daggers
@@ -822,7 +817,7 @@ export default function App() {
   if (phase === 'PASS') {
     const p = PLAYERS[playerOrder[currentPlayerIdx]];
     return (
-      <div className="fixed inset-0 bg-stone-950 flex flex-col items-center justify-center p-6 text-center z-50 animate-fade-in overflow-hidden">
+      <div className="h-[100dvh] w-full bg-stone-950 flex flex-col items-center justify-center p-6 text-center z-50 animate-fade-in overflow-hidden fixed inset-0">
         <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[150vw] h-[150vw] md:w-[80vw] md:h-[80vw] opacity-10 blur-3xl rounded-full ${p.color}`}></div>
 
         <div className="relative z-10 flex flex-col items-center w-full max-w-md">
@@ -846,7 +841,7 @@ export default function App() {
   if (phase === 'SECRET') {
     const p = PLAYERS[playerOrder[currentPlayerIdx]];
     return (
-      <div className="fixed inset-0 bg-stone-950 flex flex-col z-50 animate-fade-in">
+      <div className="h-[100dvh] w-full bg-stone-950 flex flex-col z-50 animate-fade-in fixed inset-0">
         <div className="absolute top-0 left-0 right-0 p-4 pt-safe z-40 pointer-events-none flex justify-between items-start">
            <div className="pointer-events-auto bg-stone-900/90 backdrop-blur border-2 rounded-xl p-3 shadow-lg max-w-[60%]" style={{ borderColor: p.color.replace('bg-','') }}>
               <h2 className={`text-lg font-black leading-tight ${p.text}`}>{p.name}</h2>
@@ -876,7 +871,7 @@ export default function App() {
 
   if (phase === 'REVEAL') {
     return (
-      <div className="fixed inset-0 bg-stone-950 flex flex-col z-50 animate-fade-in">
+      <div className="h-[100dvh] w-full bg-stone-950 flex flex-col z-50 animate-fade-in fixed inset-0">
         <div className="absolute inset-0 z-0">
           <FullScreenMap 
             showAllOrders={true} territories={territories} orders={orders} setOrders={setOrders} 
@@ -1010,7 +1005,7 @@ export default function App() {
 
   if (phase === 'GAME_OVER') {
     return (
-      <div className="fixed inset-0 bg-stone-950 flex flex-col z-50 animate-fade-in">
+      <div className="h-[100dvh] w-full bg-stone-950 flex flex-col z-50 animate-fade-in fixed inset-0">
         <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-stone-950/80 backdrop-blur-sm p-6 text-center pointer-events-auto">
           <Crown size={120} className="text-yellow-500 mb-6 drop-shadow-[0_0_30px_rgba(234,179,8,0.6)]" />
           <h2 className="text-4xl md:text-6xl font-black mb-4 uppercase text-white tracking-widest">Victory</h2>
@@ -1033,13 +1028,29 @@ export default function App() {
 
   // --- WAR ROOM (Main Hub) ---
   return (
-    <div className="min-h-screen bg-stone-950 text-stone-200 font-sans flex flex-col overflow-hidden fixed inset-0">
+    <div className="h-[100dvh] w-full bg-stone-950 text-stone-200 font-sans flex flex-col overflow-hidden fixed inset-0">
       
-      <header className="bg-stone-900 border-b border-stone-800 p-4 pt-safe shadow-md flex justify-between items-center z-20 shrink-0">
-        <div className="flex items-center gap-2">
-          <Crown className="text-yellow-500" size={24} />
-          <h1 className="text-xl font-black uppercase text-white">Turn {turn}</h1>
+      {showResetModal && (
+        <div className="fixed inset-0 z-[100] bg-stone-950/80 backdrop-blur-sm flex flex-col items-center justify-center p-6 animate-fade-in">
+           <div className="bg-stone-900 border-2 border-stone-700 p-6 rounded-3xl shadow-2xl max-w-sm w-full text-center">
+              <Crown className="text-yellow-500 mx-auto mb-4" size={40} />
+              <h3 className="text-xl font-black text-white mb-3">Return to main menu?</h3>
+              <p className="text-stone-400 mb-6 text-sm leading-relaxed">Are you sure you want to return to the main menu? All progress in this game will be lost.</p>
+              <div className="flex gap-3">
+                 <button onClick={() => setShowResetModal(false)} className="flex-1 py-3.5 bg-stone-800 hover:bg-stone-700 text-white rounded-xl font-bold transition-colors">Cancel</button>
+                 <button onClick={() => { setShowResetModal(false); setPhase('TITLE'); }} className="flex-1 py-3.5 bg-red-700 hover:bg-red-600 text-white rounded-xl font-bold transition-colors shadow-lg shadow-red-900/50">Yes, exit</button>
+              </div>
+           </div>
         </div>
+      )}
+
+      <header className="bg-stone-900 border-b border-stone-800 p-4 pt-safe shadow-md flex justify-between items-center z-20 shrink-0 relative">
+        <button onClick={() => setShowResetModal(true)} className="flex items-center gap-2 transition-transform active:scale-95 group">
+          <div className="bg-stone-800 p-1.5 rounded-lg border border-stone-700 group-hover:bg-stone-700 transition-colors">
+             <Crown className="text-yellow-500" size={20} />
+          </div>
+          <h1 className="text-lg font-black uppercase text-white tracking-wider">Turn {turn}</h1>
+        </button>
         <button 
           onClick={startOrdersPhase}
           className="bg-blue-600 text-white font-bold py-2 px-4 rounded-full shadow-lg flex items-center gap-1 text-sm active:scale-95 transition-transform"
@@ -1106,7 +1117,7 @@ export default function App() {
 
       </main>
 
-      <nav className="bg-stone-900 border-t border-stone-800 pb-safe shrink-0 z-20 flex justify-around p-2">
+      <nav className="bg-stone-900 border-t border-stone-800 pb-safe shrink-0 z-50 flex justify-around p-2 relative">
         <button onClick={() => setActiveTab('map')} className={`flex flex-col items-center p-2 w-20 transition-colors ${activeTab === 'map' ? 'text-white' : 'text-stone-500 hover:text-stone-300'}`}>
           <MapIcon size={24} className="mb-1" />
           <span className="text-xs font-bold">Map</span>
@@ -1149,7 +1160,7 @@ export default function App() {
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #57534e; border-radius: 6px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #78716c; }
         
-        body, html { overscroll-behavior-y: none; background-color: #0c0a09; }
+        body, html { overscroll-behavior-y: none; background-color: #0c0a09; margin: 0; padding: 0; height: 100%; }
       `}} />
     </div>
   );
