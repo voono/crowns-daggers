@@ -500,33 +500,57 @@ const FullScreenMap = ({
   );
 };
 
+// --- INITIAL CACHE LOADER ---
+const getSavedState = () => {
+  try {
+    const saved = localStorage.getItem('crownsAndDaggersState');
+    if (saved) return JSON.parse(saved);
+  } catch (e) {
+    console.error("Failed to parse cached state", e);
+  }
+  return null;
+};
 
 // --- MAIN APPLICATION COMPONENT ---
 export default function App() {
   const [showResetModal, setShowResetModal] = useState(false);
+  
+  // Load initial state from cache just once
+  const savedState = useMemo(() => getSavedState(), []);
 
-  const [playerCount, setPlayerCount] = useState(3);
-  const [mapConfig, setMapConfig] = useState(MAP_CONFIGS[3]);
+  const [playerCount, setPlayerCount] = useState(savedState?.playerCount ?? 3);
+  const [mapConfig, setMapConfig] = useState(savedState?.mapConfig ?? MAP_CONFIGS[3]);
 
   // Core Game State
-  const [phase, setPhase] = useState('TITLE'); 
-  const [territories, setTerritories] = useState(MAP_CONFIGS[3].initial);
-  const [turn, setTurn] = useState(1);
-  const [logs, setLogs] = useState(["The war for the Throne begins!"]);
-  const [winner, setWinner] = useState(null);
-  const [currentEvent, setCurrentEvent] = useState(GAME_EVENTS.CLEAR_SKIES);
+  const [phase, setPhase] = useState(savedState?.phase ?? 'TITLE'); 
+  const [territories, setTerritories] = useState(savedState?.territories ?? MAP_CONFIGS[3].initial);
+  const [turn, setTurn] = useState(savedState?.turn ?? 1);
+  const [logs, setLogs] = useState(savedState?.logs ?? ["The war for the Throne begins!"]);
+  const [winner, setWinner] = useState(savedState?.winner ?? null);
+  const [currentEvent, setCurrentEvent] = useState(savedState?.currentEvent ?? GAME_EVENTS.CLEAR_SKIES);
 
   // Turn State
-  const [playerOrder, setPlayerOrder] = useState([]);
-  const [currentPlayerIdx, setCurrentPlayerIdx] = useState(0);
-  const [orders, setOrders] = useState({}); 
+  const [playerOrder, setPlayerOrder] = useState(savedState?.playerOrder ?? []);
+  const [currentPlayerIdx, setCurrentPlayerIdx] = useState(savedState?.currentPlayerIdx ?? 0);
+  const [orders, setOrders] = useState(savedState?.orders ?? {}); 
 
   // UI State for Secret Phase
   const [selectedNode, setSelectedNode] = useState(null);
   const [pendingAction, setPendingAction] = useState(null); 
   
-  // Mobile Tab State for War Room
-  const [activeTab, setActiveTab] = useState('map'); 
+  // UI State for War Room & Reveal
+  const [activeTab, setActiveTab] = useState(savedState?.activeTab ?? 'map'); 
+  const [showReports, setShowReports] = useState(savedState?.showReports ?? false);
+
+  // --- SAVE STATE HOOK ---
+  useEffect(() => {
+    const stateToSave = {
+      playerCount, mapConfig, phase, territories, turn, logs, winner, 
+      currentEvent, playerOrder, currentPlayerIdx, orders, activeTab, showReports
+    };
+    localStorage.setItem('crownsAndDaggersState', JSON.stringify(stateToSave));
+  }, [playerCount, mapConfig, phase, territories, turn, logs, winner, currentEvent, playerOrder, currentPlayerIdx, orders, activeTab, showReports]);
+
 
   // Pre-calculate Battles for the "Reveal" Phase
   const combatPreviews = useMemo(() => {
@@ -609,11 +633,25 @@ export default function App() {
     setLogs(["The war for the Throne begins!"]);
     setWinner(null);
     setPhase('WAR_ROOM');
+    setShowReports(false);
     
     const randomEvent = GAME_EVENTS[EVENT_KEYS[Math.floor(Math.random() * EVENT_KEYS.length)]];
     setCurrentEvent(randomEvent);
     const activePlayers = Object.keys(PLAYERS).slice(0, playerCount);
     setPlayerOrder(activePlayers.sort(() => Math.random() - 0.5));
+  };
+
+  const handleExitToMenu = () => {
+    localStorage.removeItem('crownsAndDaggersState');
+    setShowResetModal(false);
+    setPhase('TITLE');
+    
+    // Reset core states to allow for a clean fresh start if pressing play right after
+    setTurn(1);
+    setOrders({});
+    setShowReports(false);
+    setLogs(["The war for the Throne begins!"]);
+    setTerritories(MAP_CONFIGS[playerCount].initial);
   };
 
   const startOrdersPhase = () => {
@@ -630,6 +668,7 @@ export default function App() {
       setPhase('PASS');
     } else {
       setPhase('REVEAL');
+      setShowReports(false); // Reset reports viewing state just in case
     }
   };
 
@@ -775,6 +814,7 @@ export default function App() {
       setCurrentEvent(GAME_EVENTS[EVENT_KEYS[Math.floor(Math.random() * EVENT_KEYS.length)]]);
       setPhase('WAR_ROOM');
       setActiveTab('map');
+      setShowReports(false);
     }
   };
 
@@ -818,7 +858,7 @@ export default function App() {
     const p = PLAYERS[playerOrder[currentPlayerIdx]];
     return (
       <div className="h-[100dvh] w-full bg-stone-950 flex flex-col items-center justify-center p-6 text-center z-50 animate-fade-in overflow-hidden fixed inset-0">
-        <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[150vw] h-[150vw] md:w-[80vw] md:h-[80vw] opacity-10 blur-3xl rounded-full ${p.color}`}></div>
+        <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[150vw] h-[150vw] md:w-[80vw] h-[80vw] opacity-10 blur-3xl rounded-full ${p.color}`}></div>
 
         <div className="relative z-10 flex flex-col items-center w-full max-w-md">
           <div className={`mb-8 p-6 rounded-full border-4 ${p.border} bg-stone-900 shadow-2xl`}>
@@ -872,6 +912,8 @@ export default function App() {
   if (phase === 'REVEAL') {
     return (
       <div className="h-[100dvh] w-full bg-stone-950 flex flex-col z-50 animate-fade-in fixed inset-0">
+        
+        {/* Layer 1: Background Map showing all plotted orders */}
         <div className="absolute inset-0 z-0">
           <FullScreenMap 
             showAllOrders={true} territories={territories} orders={orders} setOrders={setOrders} 
@@ -879,126 +921,144 @@ export default function App() {
           />
         </div>
 
-        <div className="absolute inset-0 flex flex-col items-center justify-center p-4 z-40 pointer-events-none bg-stone-950/70 backdrop-blur-sm">
-            <div className="bg-stone-900/95 border-2 border-stone-700 rounded-[2rem] shadow-2xl pointer-events-auto w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden ring-1 ring-white/10">
-              
-              <div className="bg-stone-950 p-5 border-b border-stone-800 shrink-0 text-center relative overflow-hidden">
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-40 h-40 bg-red-600/10 blur-[40px] rounded-full"></div>
-                <h2 className="text-xl md:text-2xl font-black text-white uppercase tracking-[0.2em] relative z-10 flex items-center justify-center gap-3">
-                  <ScrollText className="text-red-500" />
-                  Battle Reports
-                  <ScrollText className="text-red-500" style={{ transform: 'scaleX(-1)' }} />
-                </h2>
-              </div>
-              
-              <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-6 custom-scrollbar bg-gradient-to-b from-stone-900/50 to-stone-950/50">
-                {combatPreviews.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-stone-400 animate-fade-slide-up">
-                      <div className="w-24 h-24 bg-stone-800/50 rounded-full flex items-center justify-center mb-6 border border-stone-700 shadow-inner">
-                          <Tent size={48} className="text-stone-500" />
-                      </div>
-                      <p className="text-xl font-bold text-stone-300">The Realm Knows Peace</p>
-                      <p className="text-sm mt-2">No blood was spilled this turn.</p>
-                  </div>
-                ) : (
-                  combatPreviews.map((preview, index) => {
-                    const primaryAtt = preview.attackers[0];
-                    const attInfo = PLAYERS[primaryAtt.attackerId];
-                    const def = preview.defender;
-                    const defInfo = def.ownerId ? PLAYERS[def.ownerId] : null;
+        {/* Layer 2: View Battle Reports Button (visible when reports are hidden) */}
+        {!showReports && (
+          <div className="absolute bottom-12 left-0 right-0 flex justify-center z-40 pointer-events-none">
+             <button 
+                onClick={() => setShowReports(true)}
+                className="pointer-events-auto bg-red-700 hover:bg-red-600 text-white font-black py-4 px-8 rounded-2xl shadow-[0_10px_40px_rgba(185,28,28,0.6)] flex items-center gap-3 text-xl active:scale-95 transition-all border-2 border-red-500/50"
+             >
+                <ScrollText size={24} /> View Battle Reports
+             </button>
+          </div>
+        )}
 
-                    return (
-                      <div 
-                        key={preview.targetId} 
-                        className="relative bg-stone-950 border border-stone-700 rounded-3xl overflow-hidden shadow-[0_10px_30px_rgba(0,0,0,0.5)] animate-fade-slide-up"
-                        style={{ animationDelay: `${index * 150}ms` }}
-                      >
-                         <div className="bg-stone-900 py-3 text-center border-b border-stone-800 relative shadow-md z-10">
-                            <h4 className="font-black text-stone-200 tracking-widest uppercase">{mapConfig.nodes[preview.targetId].name}</h4>
-                         </div>
+        {/* Layer 3: The Battle Reports Modal overlay */}
+        {showReports && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center p-4 z-40 pointer-events-none bg-stone-950/70 backdrop-blur-sm animate-fade-in">
+              <div className="bg-stone-900/95 border-2 border-stone-700 rounded-[2rem] shadow-2xl pointer-events-auto w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden ring-1 ring-white/10">
+                
+                <div className="bg-stone-950 p-5 border-b border-stone-800 shrink-0 text-center relative overflow-hidden">
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-40 h-40 bg-red-600/10 blur-[40px] rounded-full"></div>
+                  <button onClick={() => setShowReports(false)} className="absolute top-4 right-4 text-stone-500 hover:text-white transition-colors z-20">
+                     <X size={24} />
+                  </button>
+                  <h2 className="text-xl md:text-2xl font-black text-white uppercase tracking-[0.2em] relative z-10 flex items-center justify-center gap-3">
+                    <ScrollText className="text-red-500" />
+                    Battle Reports
+                    <ScrollText className="text-red-500" style={{ transform: 'scaleX(-1)' }} />
+                  </h2>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-6 custom-scrollbar bg-gradient-to-b from-stone-900/50 to-stone-950/50">
+                  {combatPreviews.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-16 text-stone-400 animate-fade-slide-up">
+                        <div className="w-24 h-24 bg-stone-800/50 rounded-full flex items-center justify-center mb-6 border border-stone-700 shadow-inner">
+                            <Tent size={48} className="text-stone-500" />
+                        </div>
+                        <p className="text-xl font-bold text-stone-300">The Realm Knows Peace</p>
+                        <p className="text-sm mt-2">No blood was spilled this turn.</p>
+                    </div>
+                  ) : (
+                    combatPreviews.map((preview, index) => {
+                      const primaryAtt = preview.attackers[0];
+                      const attInfo = PLAYERS[primaryAtt.attackerId];
+                      const def = preview.defender;
+                      const defInfo = def.ownerId ? PLAYERS[def.ownerId] : null;
 
-                         <div className="p-3 md:p-4 flex flex-col">
-                             <div className="flex items-stretch justify-between gap-2 relative">
-                                 
-                                 <div className="flex-1 bg-stone-900/80 border border-stone-800 rounded-2xl p-3 flex flex-col items-center relative overflow-hidden">
-                                     <div className={`absolute top-0 w-full h-1.5 ${attInfo.color}`} />
-                                     <Swords className={`mb-1 mt-1 ${attInfo.text}`} size={20} />
-                                     <span className={`font-black text-[11px] uppercase tracking-wider text-center leading-tight mb-3 ${attInfo.text}`}>{attInfo.name}</span>
-                                     <span className="text-5xl font-black text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] leading-none mb-4">{primaryAtt.power}</span>
-                                     
-                                     <div className="w-full space-y-1.5 mt-auto">
-                                         <ModRow label="Marching" val={primaryAtt.base} />
-                                         {primaryAtt.support > 0 && <ModRow label="Support" val={`+${primaryAtt.support}`} color="text-blue-400" bg="bg-blue-950/30 border-blue-900/50" />}
-                                         {primaryAtt.isDragon && <ModRow label="Dragon Bonus" val="+1" color="text-red-400" bg="bg-red-950/30 border-red-900/50" />}
-                                     </div>
-                                 </div>
+                      return (
+                        <div 
+                          key={preview.targetId} 
+                          className="relative bg-stone-950 border border-stone-700 rounded-3xl overflow-hidden shadow-[0_10px_30px_rgba(0,0,0,0.5)] animate-fade-slide-up"
+                          style={{ animationDelay: `${index * 150}ms` }}
+                        >
+                            <div className="bg-stone-900 py-3 text-center border-b border-stone-800 relative shadow-md z-10">
+                              <h4 className="font-black text-stone-200 tracking-widest uppercase">{mapConfig.nodes[preview.targetId].name}</h4>
+                            </div>
 
-                                 <div className="flex flex-col items-center justify-center shrink-0 w-8 z-10 relative">
-                                    <div className="absolute top-0 bottom-0 w-px bg-stone-800/80 -z-10"></div>
-                                    <div className="w-8 h-8 rounded-full bg-stone-950 border border-stone-700 flex items-center justify-center shadow-lg">
-                                         <span className="text-stone-500 font-black text-[10px] tracking-wider">VS</span>
+                            <div className="p-3 md:p-4 flex flex-col">
+                                <div className="flex items-stretch justify-between gap-2 relative">
+                                    
+                                    <div className="flex-1 bg-stone-900/80 border border-stone-800 rounded-2xl p-3 flex flex-col items-center relative overflow-hidden">
+                                        <div className={`absolute top-0 w-full h-1.5 ${attInfo.color}`} />
+                                        <Swords className={`mb-1 mt-1 ${attInfo.text}`} size={20} />
+                                        <span className={`font-black text-[11px] uppercase tracking-wider text-center leading-tight mb-3 ${attInfo.text}`}>{attInfo.name}</span>
+                                        <span className="text-5xl font-black text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] leading-none mb-4">{primaryAtt.power}</span>
+                                        
+                                        <div className="w-full space-y-1.5 mt-auto">
+                                            <ModRow label="Marching" val={primaryAtt.base} />
+                                            {primaryAtt.support > 0 && <ModRow label="Support" val={`+${primaryAtt.support}`} color="text-blue-400" bg="bg-blue-950/30 border-blue-900/50" />}
+                                            {primaryAtt.isDragon && <ModRow label="Dragon Bonus" val="+1" color="text-red-400" bg="bg-red-950/30 border-red-900/50" />}
+                                        </div>
                                     </div>
-                                 </div>
 
-                                 <div className="flex-1 bg-stone-900/80 border border-stone-800 rounded-2xl p-3 flex flex-col items-center relative overflow-hidden">
-                                     <div className={`absolute top-0 w-full h-1.5 ${defInfo ? defInfo.color : 'bg-stone-500'}`} />
-                                     <Shield className={`mb-1 mt-1 ${defInfo ? defInfo.text : 'text-stone-400'}`} size={20} />
-                                     <span className={`font-black text-[11px] uppercase tracking-wider text-center leading-tight mb-3 ${defInfo ? defInfo.text : 'text-stone-400'}`}>
-                                         {defInfo ? defInfo.name : 'Neutral'}
-                                     </span>
-                                     <span className="text-5xl font-black text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] leading-none mb-4">{def.power}</span>
+                                    <div className="flex flex-col items-center justify-center shrink-0 w-8 z-10 relative">
+                                      <div className="absolute top-0 bottom-0 w-px bg-stone-800/80 -z-10"></div>
+                                      <div className="w-8 h-8 rounded-full bg-stone-950 border border-stone-700 flex items-center justify-center shadow-lg">
+                                            <span className="text-stone-500 font-black text-[10px] tracking-wider">VS</span>
+                                      </div>
+                                    </div>
 
-                                     <div className="w-full space-y-1.5 mt-auto">
-                                         <ModRow label="Garrison" val={def.base} />
-                                         {def.support > 0 && <ModRow label="Support" val={`+${def.support}`} color="text-blue-400" bg="bg-blue-950/30 border-blue-900/50" />}
-                                         {def.isDefending && <ModRow label="Defend Order" val={`+${def.base}`} color="text-green-400" bg="bg-green-950/30 border-green-900/50" />}
-                                         {def.isWolf && <ModRow label="Wolf Bonus" val="+1" color="text-stone-300" bg="bg-stone-700/30 border-stone-600/50" />}
-                                         {def.isCastle && <ModRow label="Castle Walls" val="+1" color="text-yellow-500" bg="bg-yellow-950/30 border-yellow-900/50" />}
-                                         {def.isRebellion && <ModRow label="Rebellion" val="+1" color="text-orange-500" bg="bg-orange-950/30 border-orange-900/50" />}
-                                     </div>
-                                 </div>
-                             </div>
+                                    <div className="flex-1 bg-stone-900/80 border border-stone-800 rounded-2xl p-3 flex flex-col items-center relative overflow-hidden">
+                                        <div className={`absolute top-0 w-full h-1.5 ${defInfo ? defInfo.color : 'bg-stone-500'}`} />
+                                        <Shield className={`mb-1 mt-1 ${defInfo ? defInfo.text : 'text-stone-400'}`} size={20} />
+                                        <span className={`font-black text-[11px] uppercase tracking-wider text-center leading-tight mb-3 ${defInfo ? defInfo.text : 'text-stone-400'}`}>
+                                            {defInfo ? defInfo.name : 'Neutral'}
+                                        </span>
+                                        <span className="text-5xl font-black text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] leading-none mb-4">{def.power}</span>
 
-                             {preview.attackers.length > 1 && (
-                                 <div className="mt-3 pt-3 border-t border-stone-800">
-                                     <span className="text-[10px] text-stone-500 font-bold uppercase tracking-widest block mb-2 text-center">Additional Assailants</span>
-                                     <div className="flex flex-col gap-2">
-                                         {preview.attackers.slice(1).map(att => {
-                                             const pInfoOther = PLAYERS[att.attackerId];
-                                             return (
-                                                 <div key={att.attackerId} className={`flex justify-between items-center bg-stone-900/50 p-2.5 rounded-xl border border-stone-800 border-l-4 ${pInfoOther.border}`}>
-                                                     <div className="flex items-center gap-2">
-                                                         <Swords size={14} className={pInfoOther.text} />
-                                                         <span className={`text-xs font-bold ${pInfoOther.text}`}>{pInfoOther.name}</span>
-                                                     </div>
-                                                     <div className="flex items-center gap-2 bg-stone-950 px-2 py-0.5 rounded-md border border-stone-800">
-                                                         <span className="text-[10px] uppercase text-stone-400 font-bold">Power</span>
-                                                         <span className="text-lg font-black text-white">{att.power}</span>
-                                                     </div>
-                                                 </div>
-                                             );
-                                         })}
-                                     </div>
-                                 </div>
-                             )}
-                         </div>
-                      </div>
-                    );
-                  })
-                )}
+                                        <div className="w-full space-y-1.5 mt-auto">
+                                            <ModRow label="Garrison" val={def.base} />
+                                            {def.support > 0 && <ModRow label="Support" val={`+${def.support}`} color="text-blue-400" bg="bg-blue-950/30 border-blue-900/50" />}
+                                            {def.isDefending && <ModRow label="Defend Order" val={`+${def.base}`} color="text-green-400" bg="bg-green-950/30 border-green-900/50" />}
+                                            {def.isWolf && <ModRow label="Wolf Bonus" val="+1" color="text-stone-300" bg="bg-stone-700/30 border-stone-600/50" />}
+                                            {def.isCastle && <ModRow label="Castle Walls" val="+1" color="text-yellow-500" bg="bg-yellow-950/30 border-yellow-900/50" />}
+                                            {def.isRebellion && <ModRow label="Rebellion" val="+1" color="text-orange-500" bg="bg-orange-950/30 border-orange-900/50" />}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {preview.attackers.length > 1 && (
+                                    <div className="mt-3 pt-3 border-t border-stone-800">
+                                        <span className="text-[10px] text-stone-500 font-bold uppercase tracking-widest block mb-2 text-center">Additional Assailants</span>
+                                        <div className="flex flex-col gap-2">
+                                            {preview.attackers.slice(1).map(att => {
+                                                const pInfoOther = PLAYERS[att.attackerId];
+                                                return (
+                                                    <div key={att.attackerId} className={`flex justify-between items-center bg-stone-900/50 p-2.5 rounded-xl border border-stone-800 border-l-4 ${pInfoOther.border}`}>
+                                                        <div className="flex items-center gap-2">
+                                                            <Swords size={14} className={pInfoOther.text} />
+                                                            <span className={`text-xs font-bold ${pInfoOther.text}`}>{pInfoOther.name}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 bg-stone-950 px-2 py-0.5 rounded-md border border-stone-800">
+                                                            <span className="text-[10px] uppercase text-stone-400 font-bold">Power</span>
+                                                            <span className="text-lg font-black text-white">{att.power}</span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                <div className="bg-stone-950 p-5 border-t border-stone-800 shrink-0">
+                  <button 
+                    onClick={resolveTurn}
+                    className="w-full relative group overflow-hidden bg-red-700 hover:bg-red-600 text-white font-black py-4 rounded-xl shadow-[0_0_30px_rgba(185,28,28,0.4)] flex justify-center items-center gap-3 text-xl active:scale-95 transition-all"
+                  >
+                    <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]"></div>
+                    Resolve Bloodshed <Swords size={22} className="group-hover:rotate-12 transition-transform drop-shadow-md"/>
+                  </button>
+                </div>
               </div>
-
-              <div className="bg-stone-950 p-5 border-t border-stone-800 shrink-0">
-                <button 
-                  onClick={resolveTurn}
-                  className="w-full relative group overflow-hidden bg-red-700 hover:bg-red-600 text-white font-black py-4 rounded-xl shadow-[0_0_30px_rgba(185,28,28,0.4)] flex justify-center items-center gap-3 text-xl active:scale-95 transition-all"
-                >
-                  <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite]"></div>
-                  Resolve Bloodshed <Swords size={22} className="group-hover:rotate-12 transition-transform drop-shadow-md"/>
-                </button>
-              </div>
-            </div>
-        </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -1038,7 +1098,7 @@ export default function App() {
               <p className="text-stone-400 mb-6 text-sm leading-relaxed">Are you sure you want to return to the main menu? All progress in this game will be lost.</p>
               <div className="flex gap-3">
                  <button onClick={() => setShowResetModal(false)} className="flex-1 py-3.5 bg-stone-800 hover:bg-stone-700 text-white rounded-xl font-bold transition-colors">Cancel</button>
-                 <button onClick={() => { setShowResetModal(false); setPhase('TITLE'); }} className="flex-1 py-3.5 bg-red-700 hover:bg-red-600 text-white rounded-xl font-bold transition-colors shadow-lg shadow-red-900/50">Yes, exit</button>
+                 <button onClick={handleExitToMenu} className="flex-1 py-3.5 bg-red-700 hover:bg-red-600 text-white rounded-xl font-bold transition-colors shadow-lg shadow-red-900/50">Yes, exit</button>
               </div>
            </div>
         </div>
