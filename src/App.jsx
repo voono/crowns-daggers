@@ -372,8 +372,39 @@ const FullScreenMap = ({
               if (isSupport) strokeColor = "#3b82f6"; // blue
               else if (isFriendly) strokeColor = "#a8a29e"; // stone
 
+              // Calculate offset to back off the arrows from the exact centers of the nodes
+              const dx = target.x - source.x;
+              const dy = target.y - source.y;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              
+              // 1% coordinate distance = 10px on the virtual grid. 
+              // Node radius is ~40px (4%). We add padding for aesthetics and arrowhead length.
+              const sourceOffset = 4;
+              const targetOffset = 4.0; 
+              
+              let startX = source.x;
+              let startY = source.y;
+              let endX = target.x;
+              let endY = target.y;
+
+              // Only adjust if distance is large enough to prevent math inversion
+              if (dist > (sourceOffset + targetOffset)) {
+                startX = source.x + (dx * sourceOffset) / dist;
+                startY = source.y + (dy * sourceOffset) / dist;
+                endX = source.x + (dx * (dist - targetOffset)) / dist;
+                endY = source.y + (dy * (dist - targetOffset)) / dist;
+              }
+
               return (
-                <line key={`order-${sourceId}`} x1={`${source.x}%`} y1={`${source.y}%`} x2={`${target.x}%`} y2={`${target.y}%`} stroke={strokeColor} strokeWidth="6" markerEnd="url(#arrowhead)" className="animate-pulse shadow-lg drop-shadow-md" />
+                <line 
+                  key={`order-${sourceId}`} 
+                  x1={`${startX}%`} y1={`${startY}%`} 
+                  x2={`${endX}%`} y2={`${endY}%`} 
+                  stroke={strokeColor} 
+                  strokeWidth="6" 
+                  markerEnd="url(#arrowhead)" 
+                  className="animate-pulse shadow-lg drop-shadow-md" 
+                />
               );
             }
             return null;
@@ -491,6 +522,76 @@ export default function App() {
   
   // Mobile Tab State for War Room
   const [activeTab, setActiveTab] = useState('map'); // 'map', 'intel', 'logs'
+
+  // Pre-calculate Battles for the "Reveal" Phase overlay
+  const combatPreviews = useMemo(() => {
+    if (phase !== 'REVEAL') return [];
+
+    const supportBuffs = {};
+    if (currentEvent.id !== 'FOG_OF_WAR') {
+      Object.entries(orders).forEach(([sourceId, order]) => {
+        if (order.type === 'SUPPORT') {
+          let units = parseInt(territories[sourceId].units, 10);
+          if (territories[sourceId].ownerId === 'p4') units += 1;
+          supportBuffs[order.targetId] = (supportBuffs[order.targetId] || 0) + units;
+        }
+      });
+    }
+
+    const battles = {};
+    Object.entries(orders).forEach(([sourceId, order]) => {
+      if (order.type === 'MARCH') {
+        const sourceOwner = territories[sourceId].ownerId;
+        const targetOwner = territories[order.targetId].ownerId;
+        if (sourceOwner !== targetOwner) {
+            battles[order.targetId] = battles[order.targetId] || [];
+            const baseUnits = parseInt(territories[sourceId].units, 10);
+            const support = parseInt(supportBuffs[sourceId] || 0, 10);
+            let attPower = baseUnits + support;
+            if (sourceOwner === 'p3') attPower += 1;
+            battles[order.targetId].push({ attackerId: sourceOwner, power: attPower, base: baseUnits, support, isDragon: sourceOwner === 'p3' });
+        }
+      }
+    });
+
+    return Object.keys(battles).map(targetId => {
+      const targetState = territories[targetId];
+      const targetOwner = targetState.ownerId;
+      const targetOrder = orders[targetId];
+      const isCastle = mapConfig.nodes[targetId].isCastle;
+
+      const baseDefUnits = parseInt(targetState.units, 10);
+      const defSupport = parseInt(supportBuffs[targetId] || 0, 10);
+      let defPower = baseDefUnits + defSupport;
+
+      let isDefending = false;
+      let isWolf = false;
+      if (targetOrder?.type === 'DEFEND') {
+          defPower += baseDefUnits;
+          isDefending = true;
+          if (targetOwner === 'p2') { defPower += 1; isWolf = true; }
+      }
+      if (isCastle) defPower += 1;
+      let isRebellion = false;
+      if (currentEvent.id === 'REBELLION' && !targetOwner) { defPower += 1; isRebellion = true; }
+
+      return {
+        targetId,
+        attackers: battles[targetId].sort((a, b) => b.power - a.power),
+        defender: {
+          ownerId: targetOwner,
+          power: defPower,
+          base: baseDefUnits,
+          support: defSupport,
+          isDefending,
+          isWolf,
+          isCastle,
+          isRebellion
+        }
+      };
+    });
+  }, [phase, orders, territories, currentEvent.id, mapConfig.nodes]);
+
 
   // --- GAME LOOP LOGIC (Unchanged robust logic) ---
 
@@ -776,13 +877,74 @@ export default function App() {
     return (
       <div className="fixed inset-0 bg-stone-950 flex flex-col z-50 animate-fade-in">
         <div className="absolute top-safe left-0 right-0 p-4 z-40 pointer-events-none flex flex-col items-center">
-            <div className="bg-red-900/90 backdrop-blur border-2 border-red-500 rounded-2xl p-4 shadow-2xl text-center pointer-events-auto w-full max-w-md">
-              <h2 className="text-3xl font-black text-white uppercase tracking-widest mb-2">Orders Revealed</h2>
+            <div className="bg-red-950/90 backdrop-blur border-2 border-red-800 rounded-3xl p-5 shadow-2xl text-center pointer-events-auto w-full max-w-md max-h-[85vh] flex flex-col">
+              <h2 className="text-3xl font-black text-white uppercase tracking-widest mb-1 shrink-0">Orders Revealed</h2>
+              
+              <div className="flex-1 overflow-y-auto min-h-0 my-4 pr-1 space-y-4 text-left custom-scrollbar">
+                {combatPreviews.length === 0 ? (
+                  <div className="text-stone-400 text-sm text-center py-6 bg-stone-900/50 rounded-xl border border-stone-800">
+                    No bloodshed this turn.
+                  </div>
+                ) : (
+                  combatPreviews.map(preview => (
+                    <div key={preview.targetId} className="bg-stone-900 border border-stone-700 rounded-2xl p-4 shadow-inner">
+                      <h4 className="font-black text-white mb-3 text-center text-lg drop-shadow-md">{mapConfig.nodes[preview.targetId].name}</h4>
+                      
+                      {/* Defender Stats */}
+                      <div className={`flex justify-between items-stretch mb-2 rounded-xl border-2 overflow-hidden ${preview.defender.ownerId ? PLAYERS[preview.defender.ownerId].border : 'border-stone-700'}`}>
+                        <div className="bg-stone-800/80 p-3 flex-1">
+                          <span className={`font-black flex items-center gap-2 text-base ${preview.defender.ownerId ? PLAYERS[preview.defender.ownerId].text : 'text-stone-400'}`}>
+                            <Shield size={18} className={preview.defender.ownerId ? PLAYERS[preview.defender.ownerId].text : 'text-stone-400'}/>
+                            {preview.defender.ownerId ? PLAYERS[preview.defender.ownerId].name : 'Neutrals'}
+                          </span>
+                          <div className="text-xs text-stone-300 mt-2 space-y-1">
+                            <div className="flex justify-between"><span>Base Units</span><span>{preview.defender.base}</span></div>
+                            {preview.defender.support > 0 && <div className="flex justify-between text-blue-300"><span>Support Received</span><span>+{preview.defender.support}</span></div>}
+                            {preview.defender.isDefending && <div className="flex justify-between text-green-300"><span>Defend Order</span><span>+{preview.defender.base}</span></div>}
+                            {preview.defender.isWolf && <div className="flex justify-between text-stone-200"><span>House Wolf Bonus</span><span>+1</span></div>}
+                            {preview.defender.isCastle && <div className="flex justify-between text-yellow-100"><span>Castle Defense</span><span>+1</span></div>}
+                            {preview.defender.isRebellion && <div className="flex justify-between text-orange-400"><span>Rebellion Bonus</span><span>+1</span></div>}
+                          </div>
+                        </div>
+                        <div className={`flex items-center justify-center px-4 bg-stone-900 font-black text-3xl ${preview.defender.ownerId ? PLAYERS[preview.defender.ownerId].text : 'text-stone-400'}`}>
+                          {preview.defender.power}
+                        </div>
+                      </div>
+
+                      {/* VS Badge */}
+                      <div className="flex justify-center -my-3 relative z-10">
+                        <span className="bg-stone-950 border border-stone-700 text-stone-400 text-xs font-black px-2 py-1 rounded-full uppercase tracking-wider">VS</span>
+                      </div>
+
+                      {/* Attacker Stats */}
+                      {preview.attackers.map(att => (
+                        <div key={att.attackerId} className={`mt-2 flex justify-between items-stretch rounded-xl border-2 overflow-hidden ${PLAYERS[att.attackerId].border}`}>
+                          <div className="bg-stone-800/80 p-3 flex-1">
+                            <span className={`font-black flex items-center gap-2 text-base ${PLAYERS[att.attackerId].text}`}>
+                              <Swords size={18} className={PLAYERS[att.attackerId].text}/>
+                              {PLAYERS[att.attackerId].name}
+                            </span>
+                            <div className="text-xs text-stone-300 mt-2 space-y-1">
+                              <div className="flex justify-between"><span>Marching Units</span><span>{att.base}</span></div>
+                              {att.support > 0 && <div className="flex justify-between text-blue-300"><span>Support Received</span><span>+{att.support}</span></div>}
+                              {att.isDragon && <div className="flex justify-between text-red-400"><span>House Dragon Bonus</span><span>+1</span></div>}
+                            </div>
+                          </div>
+                          <div className={`flex items-center justify-center px-4 bg-stone-900 font-black text-3xl ${PLAYERS[att.attackerId].text}`}>
+                            {att.power}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ))
+                )}
+              </div>
+
               <button 
                 onClick={resolveTurn}
-                className="w-full bg-red-600 hover:bg-red-500 text-white font-black py-4 rounded-xl shadow-lg flex justify-center items-center gap-2 text-xl active:scale-95 transition-transform"
+                className="w-full bg-red-600 hover:bg-red-500 text-white font-black py-4 rounded-xl shadow-[0_0_20px_rgba(220,38,38,0.5)] flex justify-center items-center gap-2 text-xl active:scale-95 transition-transform shrink-0"
               >
-                Resolve Bloodshed <Swords/>
+                Resolve Bloodshed <Swords size={24}/>
               </button>
             </div>
         </div>
@@ -924,6 +1086,11 @@ export default function App() {
         
         @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
         .animate-slide-up { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #57534e; border-radius: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #78716c; }
         
         body, html { overscroll-behavior-y: none; background-color: #0c0a09; }
       `}} />
